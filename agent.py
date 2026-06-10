@@ -907,7 +907,10 @@ class AgentWrapper:
         
         # Retrieve documents
         self.bm25_retriever.k = self.retrieve_num
-        bm25_documents = self.bm25_retriever.get_relevant_documents(retrieval_query)   
+        if hasattr(self.bm25_retriever, "invoke"):
+            bm25_documents = self.bm25_retriever.invoke(retrieval_query)
+        else:
+            bm25_documents = self.bm25_retriever.get_relevant_documents(retrieval_query)
         retrieval_context = [f"{doc.page_content}\n" for doc in bm25_documents] 
         memory_construction_time = time.time() - start_time
         
