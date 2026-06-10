@@ -18,10 +18,13 @@ while read -r agent_config dataset_config; do
   echo "agent_config=${agent_config}"
   echo "dataset_config=${dataset_config}"
 
-  python main.py \
+  if ! python main.py \
     --agent_config "configs/agent_conf/RAG_Agents/qwen3-4b-vllm/${agent_config}" \
-    --dataset_config "configs/data_conf/${dataset_config}" \
-    --force
+    --dataset_config "configs/data_conf/${dataset_config}"; then
+    mkdir -p outputs
+    echo "${agent_config} ${dataset_config}" >> outputs/qwen3-4b-vllm_failed_bm25.txt
+    echo "FAILED: ${agent_config} ${dataset_config}"
+  fi
 
   echo "................End................"
 done < "${root}/bash_files/configs/${file_name}"
