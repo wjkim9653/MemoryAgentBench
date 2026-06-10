@@ -35,6 +35,7 @@ class AgentWrapper:
             load_agent_from: Optional path to load existing agent state from
         """
         # Basic agent configuration
+        self.agent_config = agent_config
         self.agent_name = agent_config['agent_name']
         self.sub_dataset = dataset_config['sub_dataset']
         self.context_max_length = dataset_config['context_max_length']
@@ -51,15 +52,46 @@ class AgentWrapper:
         
         # Model configuration
         self.model = agent_config['model']
+        self.tokenizer_model = agent_config.get('tokenizer_model', self.model)
         self.max_tokens = dataset_config['generation_max_length']
         self.temperature = agent_config.get('temperature', 0.0)
+        self.provider = agent_config.get("provider")
+        self.api_base = agent_config.get("api_base")
+        self.api_key = agent_config.get("api_key") or os.environ.get("OPENAI_API_KEY") or "EMPTY"
         
         # Initialize tokenizer (default to gpt-4o-mini for non-gpt models)
-        model_for_tokenizer = self.model if "gpt-4o" in self.model else "gpt-4o-mini"
-        self.tokenizer = tiktoken.encoding_for_model(model_for_tokenizer)
+        self.tokenizer = self._create_tokenizer()
         
         # Initialize agent based on type
         self._initialize_agent_by_type(agent_config, dataset_config)
+
+    def _uses_openai_chat_api(self):
+        return (
+            self.provider in {"openai", "openai_compatible", "azure"}
+            or "gpt" in self.model
+            or "o4" in self.model
+        )
+    
+    def _create_tokenizer(self):
+        if self.provider == "openai_compatible":
+            from transformers import AutoTokenizer
+            return AutoTokenizer.from_pretrained(
+                self.tokenizer_model, 
+                trust_remote_code=True
+            )
+        model_for_tokenizer = self.model if "gpt-4o" in self.model else "gpt-4o-mini"
+        return tiktoken.encoding_for_model(model_for_tokenizer)
+    
+    def _encode_text(self, text, tokenizer=None):
+        tokenizer = tokenizer or self.tokenizer
+        try:
+            return tokenizer.encode(text, disallowed_special=())
+        except TypeError:
+            return tokenizer.encode(text, add_special_tokens=False)
+        
+    def _decode_tokens(self, tokens, tokenizer=None):
+        tokenizer = tokenizer or self.tokenizer
+        return tokenizer.decode(tokens)
 
     def _initialize_agent_by_type(self, agent_config, dataset_config):
         """Initialize the specific agent type based on agent name."""
@@ -93,6 +125,20 @@ class AgentWrapper:
 
         When using Azure, ensure self.model is the deployment name.
         """
+        if self.provider == "openai_compatible":
+            return OpenAI(
+                api_key=self.api_key,
+                base_url=self.api_base,
+            )
+
+        if self.provider == "azure":
+            from openai import AzureOpenAI
+            return AzureOpenAI(
+                api_key=self.api_key,
+                api_version=os.environ.get("AZURE_OPENAI_API_VERSION"),
+                azure_endpoint=os.environ.get("AZURE_OPENAI_ENDPOINT"),
+            )
+        
         try:
             azure_endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT")
             if azure_endpoint:
@@ -121,7 +167,7 @@ class AgentWrapper:
         """Initialize long context agent with appropriate client."""
         self.context = ''
         
-        if "gpt" in self.model or "o4" in self.model:
+        if self._uses_openai_chat_api():
             self.client = self._create_oai_client()
         elif "claude" in self.model:
             import anthropic
@@ -294,10 +340,7 @@ class AgentWrapper:
     def _query_long_context_agent(self, message):
         """Process a query for long context agents."""
         # Get appropriate tokenizer
-        try:
-            tokenizer = tiktoken.encoding_for_model(self.model)
-        except:
-            tokenizer = tiktoken.encoding_for_model("gpt-4o-mini")
+        tokenizer = self.tokenizer
         
         # Handle context truncation for non-long context models
         buffer_length = 50000
@@ -311,8 +354,15 @@ class AgentWrapper:
         
         # Query the model
         start_time = time.time()
+            
+        if "o4" in self.model and self.provider != "openai_compatible":
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=formatted_message,
+            )
+            return self._format_openai_response(response, start_time)
         
-        if "gpt" in self.model: 
+        elif self._uses_openai_chat_api():
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=formatted_message,
@@ -320,14 +370,7 @@ class AgentWrapper:
                 max_tokens=self.max_tokens
             )
             return self._format_openai_response(response, start_time)
-            
-        elif "o4" in self.model:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=formatted_message,
-            )
-            return self._format_openai_response(response, start_time)
-            
+        
         elif "claude" in self.model:
             return self._query_claude(full_message, system_message, start_time)
             
@@ -340,14 +383,14 @@ class AgentWrapper:
     def _truncate_context_if_needed(self, tokenizer):
         """Truncate context if it exceeds limits."""
         # Truncate context if it exceeds the context_max_length
-        if len(tokenizer.encode(self.context, disallowed_special=())) > self.context_max_length:
-            encoded = tokenizer.encode(self.context, disallowed_special=())
-            self.context = tokenizer.decode(encoded[-self.context_max_length:])
+        if len(self._encode_text(self.context, tokenizer)) > self.context_max_length:
+            encoded = self._encode_text(self.context, tokenizer)
+            self.context = self._decode_tokens(encoded[-self.context_max_length:], tokenizer)
         
         # Truncate if context exceeds the input_length_limit
-        if len(tokenizer.encode(self.context, disallowed_special=())) > self.input_length_limit:
-            encoded = tokenizer.encode(self.context, disallowed_special=())
-            self.context = tokenizer.decode(encoded[-self.input_length_limit:])
+        if len(self._encode_text(self.context, tokenizer)) > self.input_length_limit:
+            encoded = self._encode_text(self.context, tokenizer)
+            self.context = self._decode_tokens(encoded[-self.input_length_limit:], tokenizer)
 
     def _format_openai_response(self, response, start_time):
         """Format OpenAI API response into standard output format."""
@@ -439,8 +482,8 @@ class AgentWrapper:
         query_time_len = time.time() - self.agent_start_time - memory_construction_time
         output = self._create_standard_response(
             response,
-            len(tokenizer.encode(message, disallowed_special=())),
-            len(tokenizer.encode(response, disallowed_special=())),
+            len(self._encode_text(message, tokenizer)),
+            len(self._encode_text(response, tokenizer)),
             memory_construction_time,
             query_time_len
         )
@@ -533,8 +576,8 @@ class AgentWrapper:
             query_time_len = time.time() - self.agent_start_time - memory_construction_time
             output = self._create_standard_response(
                 total_results,
-                len(tokenizer.encode(self.context, disallowed_special=())),
-                len(tokenizer.encode(total_results, disallowed_special=())),
+                len(self._encode_text(self.context, tokenizer)),
+                len(self._encode_text(total_results, tokenizer)),
                 memory_construction_time,
                 query_time_len
             )
@@ -591,7 +634,7 @@ class AgentWrapper:
                 max_tokens=self.max_tokens
             )
             
-            memory_retrieval_length = len(self.tokenizer.encode(memories_str, disallowed_special=()))
+            memory_retrieval_length = len(self._encode_text(memories_str))
             query_time_len = time.time() - self.agent_start_time - memory_construction_time
             print(f"\nmemory_length: {memory_retrieval_length}\n")
             
@@ -672,8 +715,8 @@ class AgentWrapper:
 
             output = self._create_standard_response(
                 response,
-                len(self.tokenizer.encode(retrieved_context, disallowed_special=())),
-                len(self.tokenizer.encode(response, disallowed_special=())),
+                len(self._encode_text(retrieved_context)),
+                len(self._encode_text(response)),
                 memory_construction_time,
                 query_time_len
             )
@@ -713,9 +756,9 @@ class AgentWrapper:
                 
         # Truncate context if needed
         tokenizer = self.tokenizer
-        if len(tokenizer.encode(self.context, disallowed_special=())) > self.input_length_limit:
-            encoded = tokenizer.encode(self.context, disallowed_special=())
-            self.context = tokenizer.decode(encoded[-self.input_length_limit:])
+        if len(self._encode_text(self.context, tokenizer)) > self.input_length_limit:
+            encoded = self._encode_text(self.context, tokenizer)
+            self.context = self._decode_tokens(encoded[-self.input_length_limit:], tokenizer)
         if self.context_len > self.input_length_limit:
             self.chunks = self.chunks[1:]
             self.context_len = self.context_len - self.chunk_size
@@ -792,8 +835,8 @@ class AgentWrapper:
         
         return {
             "output": response,
-            "input_len": len(tokenizer.encode(retrieval_context + "\n" + message, disallowed_special=())),
-            "output_len": len(tokenizer.encode(response, disallowed_special=())),
+            "input_len": len(self._encode_text(retrieval_context + "\n" + message, tokenizer)),
+            "output_len": len(self._encode_text(response, tokenizer)),
             "memory_construction_time": memory_construction_time,
             "query_time_len": query_time_len,
             "retrieval_context": retrieval_context,
@@ -837,8 +880,8 @@ class AgentWrapper:
         
         return {
             "output": response,
-            "input_len": len(tokenizer.encode(retrieval_context + "\n" + message, disallowed_special=())),
-            "output_len": len(tokenizer.encode(response, disallowed_special=())),
+            "input_len": len(self._encode_text(retrieval_context + "\n" + message, tokenizer)),
+            "output_len": len(self._encode_text(response, tokenizer)),
             "memory_construction_time": memory_construction_time,
             "query_time_len": query_time_len,
             "retrieval_context": retrieval_context,
@@ -881,7 +924,7 @@ class AgentWrapper:
             model=self.model,
             messages=format_message,
             temperature=self.temperature,
-            max_tokens=self.max_tokens if "gpt-4" in self.model else None
+            max_tokens=self.max_tokens
         )
         
         query_time_len = time.time() - start_time - memory_construction_time
@@ -935,7 +978,18 @@ class AgentWrapper:
             print(f"\n\nContext {context_id} already processed, skipping {embedding_model_name} build vectorstore...\n\n")
                             
         # Retrieve relevant passages and answer the query
-        rag_system = RAGSystem(self.retriever, self.model, self.temperature, self.max_tokens, use_azure=True, azure_endpoint=os.environ.get("AZURE_OPENAI_ENDPOINT"), azure_api_key=os.environ.get("AZURE_OPENAI_API_KEY"), azure_api_version=os.environ.get("AZURE_OPENAI_API_VERSION"))
+        rag_system = RAGSystem(
+            self.retriever, 
+            self.model, 
+            self.temperature, 
+            self.max_tokens, 
+            provider=self.provider,
+            api_base=self.api_base,
+            api_key=self.api_key,
+            azure_endpoint=os.environ.get("AZURE_OPENAI_ENDPOINT"), 
+            azure_api_key=os.environ.get("AZURE_OPENAI_API_KEY"), 
+            azure_api_version=os.environ.get("AZURE_OPENAI_API_VERSION")
+        )
         system_message = get_template(self.sub_dataset, 'system', self.agent_name)
         result = rag_system.answer_query(
             query=message, 
@@ -948,8 +1002,8 @@ class AgentWrapper:
         
         return {
             "output": result["answer"],
-            "input_len": len(tokenizer.encode(retrieval_context + "\n" + message, disallowed_special=())),
-            "output_len": len(tokenizer.encode(result["answer"], disallowed_special=())),
+            "input_len": len(self._encode_text(retrieval_context + "\n" + message, tokenizer)),
+            "output_len": len(self._encode_text(result["answer"], tokenizer)),
             "memory_construction_time": result.get("memory_construction_time", result.get("memory_construction_time", 0)),
             "query_time_len": result["query_time_len"],
             "retrieval_context": retrieval_context,
@@ -975,8 +1029,8 @@ class AgentWrapper:
         
         return {
             "output": response,
-            "input_len": len(tokenizer.encode(retrieval_context + "\n" + message, disallowed_special=())),
-            "output_len": len(tokenizer.encode(response, disallowed_special=())),
+            "input_len": len(self._encode_text(retrieval_context + "\n" + message, tokenizer)),
+            "output_len": len(self._encode_text(response, tokenizer)),
             "memory_construction_time": result.get("memory_construction_time", result.get("memory_construction_time", 0)),
             "query_time_len": result["query_time_len"],
             "retrieval_context": retrieval_context,
@@ -1013,8 +1067,8 @@ class AgentWrapper:
         
         return {
             "output": response,
-            "input_len": len(tokenizer.encode(retrieval_context + "\n" + message, disallowed_special=())),
-            "output_len": len(tokenizer.encode(response, disallowed_special=())),
+            "input_len": len(self._encode_text(retrieval_context + "\n" + message, tokenizer)),
+            "output_len": len(self._encode_text(response, tokenizer)),
             "memory_construction_time": memory_construction_time,
             "query_time_len": query_time_len,
             "retrieval_context": retrieval_context,
@@ -1066,8 +1120,8 @@ class AgentWrapper:
         
         return {
             "output": response,
-            "input_len": len(tokenizer.encode(str(retrieval_context) + "\n" + message, disallowed_special=())),
-            "output_len": len(tokenizer.encode(response, disallowed_special=())),
+            "input_len": len(self._encode_text(str(retrieval_context) + "\n" + message, tokenizer)),
+            "output_len": len(self._encode_text(response, tokenizer)),
             "memory_construction_time": memory_construction_time,
             "query_time_len": query_time_len,
             "retrieval_context": retrieval_context,

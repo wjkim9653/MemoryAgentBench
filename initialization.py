@@ -312,25 +312,35 @@ def _calculate_last_completed_context_id(all_query_answer_pairs, total_queries_p
 # AGENT FOLDER GENERATION HELPERS
 # ============================================================================
 
+def _safe_path_component(value):
+    return str(value).replace("/", "__").replace(":", "_")
+
 def _generate_memory_agent_base_path(agent_config, dataset_config):
     """Generate base path for memory agents (letta, mem0, cognee, zep)."""
-    agent_name = agent_config['agent_name']
-    base_path = f"./agents/{agent_name}_{dataset_config['sub_dataset']}_chunk{agent_config['agent_chunk_size']}_model{agent_config['model']}"
+    agent_name = _safe_path_component(agent_config['agent_name'])
+    sub_dataset = _safe_path_component(dataset_config['sub_dataset'])
+    model_name = _safe_path_component(agent_config['model'])
+    base_path = f"./agents/{agent_name}_{sub_dataset}_chunk{agent_config['agent_chunk_size']}_model{model_name}"
     
-    return (f"{base_path}_mode{agent_config['letta_mode']}" 
-            if "letta" in agent_name else base_path)
+    return (f"{base_path}_mode{_safe_path_component(agent_config['letta_mode'])}" 
+            if "letta" in agent_config['agent_name'] else base_path)
 
 
 def _generate_rag_agent_path(agent_config, dataset_config, current_context_index):
     """Generate path for RAG agents."""
-    return (f"./agents/{agent_config['agent_name']}_{dataset_config['sub_dataset']}"
+    agent_name = _safe_path_component(agent_config['agent_name'])
+    sub_dataset = _safe_path_component(dataset_config['sub_dataset'])
+    model_name = _safe_path_component(agent_config['model'])
+    return (f"./agents/{agent_name}_{sub_dataset}"
             f"_k{agent_config['retrieve_num']}_chunk{dataset_config['chunk_size']}"
-            f"_model{agent_config['model']}/exp_{current_context_index}")
+            f"_model{model_name}/exp_{current_context_index}")
 
 
 def _generate_default_agent_path(agent_config, dataset_config, current_context_index):
     """Generate path for default agents."""
-    return (f"./agents/{agent_config['agent_name']}_{dataset_config['sub_dataset']}"
+    agent_name = _safe_path_component(agent_config['agent_name'])
+    sub_dataset = _safe_path_component(dataset_config['sub_dataset'])
+    return (f"./agents/{agent_name}_{sub_dataset}"
             f"/exp_{current_context_index}")
 
 

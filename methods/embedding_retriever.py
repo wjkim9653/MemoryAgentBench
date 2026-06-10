@@ -189,12 +189,20 @@ class RAGSystem:
                  model,
                  temperature,
                  max_tokens,
+                 provider=None,
+                 api_base=None,
+                 api_key=None,
                  use_azure: bool = False,
                  azure_endpoint: str = None,
                  azure_api_key: str = None,
                  azure_api_version: str = "2024-02-01"):
         self.retriever = retriever
-        if use_azure:
+        if provider == "openai_compatible":
+            self.llm = OpenAI(
+                api_key=api_key or "EMPTY",
+                base_url=api_base,
+            )
+        elif use_azure or provider == "azure":
             assert azure_endpoint and azure_api_key, (
                 "Azure configuration missing: require azure_endpoint and azure_api_key"
             )
