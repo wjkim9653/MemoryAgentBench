@@ -4,9 +4,6 @@ __pycache__
 external_repos
 process_data
 local_data
-outputs
-outputs_4o
-outputs_timecompute
 raw_dataset
 logs
 test
