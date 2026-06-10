@@ -1,0 +1,6 @@
+Simple_rag_qwen3-4b-vllm-bm25.yaml Accurate_Retrieval/EventQA/Eventqa_full.yaml
+Simple_rag_qwen3-4b-vllm-bm25.yaml Accurate_Retrieval/Ruler/QA/Ruler_qa2_421k.yaml
+Simple_rag_qwen3-4b-vllm-bm25.yaml Accurate_Retrieval/LongMemEval/Longmemeval_s_star.yaml
+Simple_rag_qwen3-4b-vllm-bm25.yaml Conflict_Resolution/Factconsolidation_sh_262k.yaml
+Simple_rag_qwen3-4b-vllm-bm25.yaml Conflict_Resolution/Factconsolidation_mh_262k.yaml
+Simple_rag_qwen3-4b-vllm-bm25.yaml Long_Range_Understanding/InfBench_sum.yaml

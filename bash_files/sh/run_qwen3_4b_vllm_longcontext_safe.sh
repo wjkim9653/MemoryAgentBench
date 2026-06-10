@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+export PYTHONUNBUFFERED=1
+export OMP_NUM_THREADS=1
+export HF_HOME="${HF_HOME:-$HOME/.cache/huggingface}"
+export HF_HUB_CACHE="${HF_HUB_CACHE:-/data/shared/huggingface/hub}"
+export HUGGINGFACE_HUB_CACHE="${HUGGINGFACE_HUB_CACHE:-$HF_HUB_CACHE}"
+
+root=$(pwd)
+file_name="qwen3_4b_vllm_longcontext_safe.txt"
+
+while read -r agent_config dataset_config; do
+  [[ -z "${agent_config:-}" ]] && continue
+  [[ "$agent_config" =~ ^# ]] && continue
+
+  echo "................Start................"
+  echo "agent_config=${agent_config}"
+  echo "dataset_config=${dataset_config}"
+
+  python main.py \
+    --agent_config "configs/agent_conf/Long_Context_Agents/${agent_config}" \
+    --dataset_config "configs/data_conf/${dataset_config}" \
+    --force
+
+  echo "................End................"
+done < "${root}/bash_files/configs/${file_name}"
