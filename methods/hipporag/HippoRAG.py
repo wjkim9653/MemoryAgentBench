@@ -43,6 +43,14 @@ class HippoRAG:
                  embedding_model_name=None,
                  embedding_base_url=None,
                  embedding_api_key=None,
+                 max_new_tokens=None,
+                 temperature=None,
+                 retrieval_top_k=None,
+                 linking_top_k=None,
+                 qa_top_k=None,
+                 openie_mode=None,
+                 embedding_batch_size=None,
+                 embedding_max_seq_len=None,
                  ):
         """
         Initializes an instance of the class and its related components.
@@ -106,6 +114,30 @@ class HippoRAG:
 
         if embedding_base_url is not None:
             self.global_config.embedding_base_url = embedding_base_url
+
+        if max_new_tokens is not None:
+            self.global_config.max_new_tokens = max_new_tokens
+
+        if temperature is not None:
+            self.global_config.temperature = temperature
+
+        if retrieval_top_k is not None:
+            self.global_config.retrieval_top_k = retrieval_top_k
+
+        if linking_top_k is not None:
+            self.global_config.linking_top_k = linking_top_k
+
+        if qa_top_k is not None:
+            self.global_config.qa_top_k = qa_top_k
+
+        if openie_mode is not None:
+            self.global_config.openie_mode = openie_mode
+
+        if embedding_batch_size is not None:
+            self.global_config.embedding_batch_size = embedding_batch_size
+
+        if embedding_max_seq_len is not None:
+            self.global_config.embedding_max_seq_len = embedding_max_seq_len
 
         _print_config = ",\n  ".join([f"{k} = {v}" for k, v in asdict(self.global_config).items()])
         logger.debug(f"HippoRAG init with config:\n  {_print_config}\n")
@@ -328,7 +360,7 @@ class HippoRAG:
                     retrieval_query =  ''.join(match.groups())
                 else:
                     retrieval_query = query
-            print(f"\n\n\ !!! Retrieve query: {retrieval_query}")
+            print(f"\n\n !!! Retrieve query: {retrieval_query}")
             # end 
             query_fact_scores = self.get_fact_scores(retrieval_query)
             top_k_fact_indices, top_k_facts, rerank_log = self.rerank_facts(retrieval_query, query_fact_scores)

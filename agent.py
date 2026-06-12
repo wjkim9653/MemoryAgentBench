@@ -849,16 +849,52 @@ class AgentWrapper:
         if self.context_id != context_id:
             docs = self.chunks
             from methods.hipporag import HippoRAG
+            safe_model = re.sub(r"[^A-Za-z0-9_.-]+", "_", self.model).strip("_")
             if any(agent_name in self.agent_name for agent_name in ["hippo_rag_v2_nv"]):
-                save_dir = os.path.join(f"./outputs/rag_retrieved/NV-Embed-v2", self.sub_dataset, f'chunksize_{self.chunk_size}', f'context_id_{context_id}')
-                embedding_model_name = 'nvidia/NV-Embed-v2'
+                default_embedding_model_name = "nvidia/NV-Embed-v2"
+                embedding_label = "NV-Embed-v2"
             elif any(agent_name in self.agent_name for agent_name in ["hippo_rag_v2_openai"]):
-                save_dir = os.path.join(f"./outputs/rag_retrieved/OpenAIEmbedding", self.sub_dataset, f'chunksize_{self.chunk_size}', f'context_id_{context_id}') 
-                embedding_model_name = 'text-embedding-ada-002'
+                default_embedding_model_name = "text-embedding-ada-002"
+                embedding_label = "OpenAIEmbedding"
+            else:
+                default_embedding_model_name = self.agent_config.get("hipporag_embedding_model", "nvidia/NV-Embed-v2")
+                embedding_label = re.sub(r"[^A-Za-z0-9_.-]+", "_", default_embedding_model_name).strip("_")
+
+            embedding_model_name = self.agent_config.get("hipporag_embedding_model", default_embedding_model_name)
+            embedding_label = re.sub(r"[^A-Za-z0-9_.-]+", "_", embedding_model_name).strip("_") or embedding_label
+            save_dir = self.agent_config.get(
+                "hipporag_save_dir",
+                os.path.join(
+                    "./outputs/rag_retrieved",
+                    safe_model,
+                    embedding_label,
+                    self.sub_dataset,
+                    f"chunksize_{self.chunk_size}",
+                    f"context_id_{context_id}",
+                ),
+            )
+
+            hipporag_kwargs = {
+                "save_dir": save_dir,
+                "llm_model_name": self.model,
+                "embedding_model_name": embedding_model_name,
+                "embedding_base_url": self.agent_config.get("hipporag_embedding_base_url"),
+                "embedding_api_key": self.agent_config.get("hipporag_embedding_api_key"),
+                "max_new_tokens": self.agent_config.get("hipporag_max_new_tokens", 2048),
+                "temperature": self.temperature,
+                "retrieval_top_k": self.agent_config.get("hipporag_retrieval_top_k"),
+                "linking_top_k": self.agent_config.get("hipporag_linking_top_k"),
+                "qa_top_k": self.agent_config.get("hipporag_qa_top_k", self.retrieve_num),
+                "openie_mode": self.agent_config.get("hipporag_openie_mode"),
+                "embedding_batch_size": self.agent_config.get("hipporag_embedding_batch_size"),
+                "embedding_max_seq_len": self.agent_config.get("hipporag_embedding_max_seq_len"),
+            }
+
+            if self.provider == "openai_compatible":
+                hipporag_kwargs["llm_base_url"] = self.api_base
+                hipporag_kwargs["llm_api_key"] = self.api_key
             
-            self.hipporag = HippoRAG(save_dir=save_dir,
-                                llm_model_name=self.model,
-                                embedding_model_name=embedding_model_name) 
+            self.hipporag = HippoRAG(**hipporag_kwargs)
             self.hipporag.index(docs=docs)
             memory_construction_time = time.time() - start_time
             print(f"\n\nHippoRAG build vectorstore finished...\n\n")
