@@ -1,0 +1,107 @@
+................Start................
+agent_config=Structure_rag_qwen3-4b-vllm-hippo_rag_v2_nv.yaml
+dataset_config=Conflict_Resolution/Factconsolidation_sh_6k.yaml
+CUDA_VISIBLE_DEVICES=3
+
+
+Using max_test_queries: 1
+
+
+06/12/2026 01:36:12 - INFO - conversation_creator - Running test on factconsolidation_sh_6k
+Dataset: factconsolidation_sh_6k
+Loading factconsolidation_sh_6k from Hugging Face dataset: ai-hyz/MemoryAgentBench
+Loaded 8 samples from Conflict_Resolution
+Filtered to 1 samples matching source 'factconsolidation_sh_6k' (from 8 total)
+Dataset length: 1, each sample has 100 qa pairs
+  0%|          | 0/1 [00:00<?, ?it/s]
+
+ Agent Memorizing...
+
+
+
+Processing experiments 1/1:   0%|          | 0/2 [00:00<?, ?it/s][AProcessing experiments 1/1: 100%|██████████| 2/2 [00:00<00:00, 28339.89it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 100 queries for context 0!!!!!
+
+
+  0%|          | 0/100 [00:00<?, ?it/s][A
+
+Loading weights:   0%|          | 0/304 [00:00<?, ?it/s][A[A
+
+Loading weights:   0%|          | 1/304 [00:00<00:32,  9.21it/s][A[A
+
+Loading weights:  10%|▉         | 30/304 [00:00<00:01, 160.71it/s][A[A
+
+Loading weights:  19%|█▉        | 57/304 [00:00<00:01, 181.24it/s][A[A
+
+Loading weights:  28%|██▊       | 84/304 [00:00<00:01, 189.65it/s][A[A
+
+Loading weights:  37%|███▋      | 111/304 [00:00<00:00, 194.02it/s][A[A
+
+Loading weights:  45%|████▌     | 138/304 [00:00<00:00, 197.84it/s][A[A
+
+Loading weights:  52%|█████▏    | 158/304 [00:00<00:00, 198.39it/s][A[A
+
+Loading weights:  60%|██████    | 183/304 [00:00<00:00, 198.26it/s][A[A
+
+Loading weights:  69%|██████▉   | 210/304 [00:01<00:00, 197.80it/s][A[A
+
+Loading weights:  78%|███████▊  | 237/304 [00:01<00:00, 198.69it/s][A[A
+
+Loading weights:  87%|████████▋ | 264/304 [00:01<00:00, 201.63it/s][A[ALoading weights: 100%|██████████| 304/304 [00:01<00:00, 206.11it/s]
+/home/wjkim/.cache/huggingface/modules/transformers_modules/nvidia/NV_hyphen_Embed_hyphen_v2/3fa59658547db50a1e8e3346cf057fd0c77ed6ef/modeling_nvembed.py:347: UserWarning: To copy construct from a tensor, it is recommended to use sourceTensor.detach().clone() or sourceTensor.detach().clone().requires_grad_(True), rather than torch.tensor(sourceTensor).
+  'input_ids': torch.tensor(batch_dict.get('input_ids').to(batch_dict.get('input_ids')).long()),
+[transformers] `use_return_dict` is deprecated! Use `return_dict` instead!
+  0%|          | 0/100 [00:07<?, ?it/s]
+  0%|          | 0/1 [00:09<?, ?it/s]
+Traceback (most recent call last):
+  File "/home/wjkim/projects/MemoryAgentBench/main.py", line 208, in <module>
+    main()
+  File "/home/wjkim/projects/MemoryAgentBench/main.py", line 193, in main
+    metrics, results, query_index, should_break = process_context(
+  File "/home/wjkim/projects/MemoryAgentBench/main.py", line 160, in process_context
+    metrics, results, query_index = process_queries_for_context(
+  File "/home/wjkim/projects/MemoryAgentBench/main.py", line 129, in process_queries_for_context
+    metrics, results = process_single_query(
+  File "/home/wjkim/projects/MemoryAgentBench/main.py", line 98, in process_single_query
+    agent_output = agent.send_message(query, memorizing=False, query_id=query_index, context_id=context_index)
+  File "/home/wjkim/projects/MemoryAgentBench/agent.py", line 323, in send_message
+    return self._handle_rag_agent(message, memorizing, query_id, context_id)
+  File "/home/wjkim/projects/MemoryAgentBench/agent.py", line 752, in _handle_rag_agent
+    return self._process_rag_query(message, query_id, context_id)
+  File "/home/wjkim/projects/MemoryAgentBench/agent.py", line 786, in _process_rag_query
+    output = handler()
+  File "/home/wjkim/projects/MemoryAgentBench/agent.py", line 769, in <lambda>
+    "hippo_rag_v2_nv": lambda: self._handle_hippo_rag(message, context_id, tokenizer),
+  File "/home/wjkim/projects/MemoryAgentBench/agent.py", line 901, in _handle_hippo_rag
+    self.hipporag.index(docs=docs)
+  File "/home/wjkim/projects/MemoryAgentBench/methods/hipporag/HippoRAG.py", line 270, in index
+    self.chunk_embedding_store.insert_strings(docs)
+  File "/home/wjkim/projects/MemoryAgentBench/methods/hipporag/embedding_store.py", line 88, in insert_strings
+    missing_embeddings = self.embedding_model.batch_encode(texts_to_encode)
+  File "/home/wjkim/projects/MemoryAgentBench/methods/hipporag/embedding_model/NVEmbedV2.py", line 124, in batch_encode
+    results = self.embedding_model.encode(**params)
+  File "/home/wjkim/projects/MemoryAgentBench/.venv/lib/python3.10/site-packages/torch/utils/_contextlib.py", line 124, in decorate_context
+    return func(*args, **kwargs)
+  File "/home/wjkim/.cache/huggingface/modules/transformers_modules/nvidia/NV_hyphen_Embed_hyphen_v2/3fa59658547db50a1e8e3346cf057fd0c77ed6ef/modeling_nvembed.py", line 428, in encode
+    return self(**features)["sentence_embeddings"].squeeze(1)
+  File "/home/wjkim/projects/MemoryAgentBench/.venv/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1778, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/wjkim/projects/MemoryAgentBench/.venv/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1789, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/wjkim/.cache/huggingface/modules/transformers_modules/nvidia/NV_hyphen_Embed_hyphen_v2/3fa59658547db50a1e8e3346cf057fd0c77ed6ef/modeling_nvembed.py", line 399, in forward
+    outputs = self.embedding_model(
+  File "/home/wjkim/projects/MemoryAgentBench/.venv/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1778, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/wjkim/projects/MemoryAgentBench/.venv/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1789, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/wjkim/.cache/huggingface/modules/transformers_modules/nvidia/NV_hyphen_Embed_hyphen_v2/3fa59658547db50a1e8e3346cf057fd0c77ed6ef/modeling_nvembed.py", line 83, in forward
+    past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+AttributeError: type object 'DynamicCache' has no attribute 'from_legacy_cache'
+FAILED: Structure_rag_qwen3-4b-vllm-hippo_rag_v2_nv.yaml Conflict_Resolution/Factconsolidation_sh_6k.yaml
+................End................

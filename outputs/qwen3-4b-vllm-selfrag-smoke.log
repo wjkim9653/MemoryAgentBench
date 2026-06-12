@@ -1,0 +1,3 @@
+................Start................
+agent_config=Agentic_memory_qwen3-4b-vllm-self_rag.yaml
+dataset_config=Conflict_Resolution/Factconsolidation_sh_6k.yaml
