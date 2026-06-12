@@ -81,15 +81,25 @@ class NVEmbedV2EmbeddingModel(BaseEmbeddingModel):
         if hasattr(PreTrainedModel, "all_tied_weights_keys"):
             return
 
-        def all_tied_weights_keys(model):
-            tied_weights_keys = getattr(model, "_tied_weights_keys", None)
+        def normalize_tied_weights_keys(tied_weights_keys):
             if tied_weights_keys is None:
                 return {}
             if isinstance(tied_weights_keys, dict):
                 return tied_weights_keys
             return {key: None for key in tied_weights_keys}
 
-        PreTrainedModel.all_tied_weights_keys = property(all_tied_weights_keys)
+        def get_all_tied_weights_keys(model):
+            if "_all_tied_weights_keys_compat" in model.__dict__:
+                return normalize_tied_weights_keys(model.__dict__["_all_tied_weights_keys_compat"])
+            return normalize_tied_weights_keys(getattr(model, "_tied_weights_keys", None))
+
+        def set_all_tied_weights_keys(model, tied_weights_keys):
+            model.__dict__["_all_tied_weights_keys_compat"] = normalize_tied_weights_keys(tied_weights_keys)
+
+        PreTrainedModel.all_tied_weights_keys = property(
+            get_all_tied_weights_keys,
+            set_all_tied_weights_keys,
+        )
 
     # def _add_eos(self, texts: List[str]) -> List[str]:
     #     # Adds EOS token to each text
