@@ -36,8 +36,8 @@
             "output": "ice hockey",
             "input_len": 7623,
             "output_len": 2,
-            "memory_construction_time": 0.004746437072753906,
-            "query_time_len": 0.4222383499145508,
+            "memory_construction_time": 0.0047016143798828125,
+            "query_time_len": 0.3517117500305176,
             "parsed_output": "ice hockey",
             "exact_match": false,
             "f1": 0,
@@ -83,14 +83,14 @@
             2
         ],
         "memory_construction_time": [
-            0.004746437072753906
+            0.0047016143798828125
         ],
         "query_time_len": [
-            0.4222383499145508
+            0.3517117500305176
         ]
     },
     "time_cost": [
-        6.111976623535156
+        6.092814922332764
     ],
     "averaged_metrics": {
         "exact_match": 0.0,
@@ -102,7 +102,7 @@
         "rougeLsum_recall": 0.0,
         "input_len": 7623.0,
         "output_len": 2.0,
-        "memory_construction_time": 0.004746437072753906,
-        "query_time_len": 0.4222383499145508
+        "memory_construction_time": 0.0047016143798828125,
+        "query_time_len": 0.3517117500305176
     }
 }
