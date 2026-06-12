@@ -27,6 +27,7 @@ class NVEmbedV2EmbeddingModel(BaseEmbeddingModel):
         # Initializing the embedding model
         logger.debug(f"Initializing {self.__class__.__name__}'s embedding model with params: {self.embedding_config.model_init_params}")
 
+        self._patch_tied_weights_keys_compat()
         self.embedding_model = AutoModel.from_pretrained(**self.embedding_config.model_init_params)
         embedding_device = getattr(self.global_config, "embedding_device", None)
         if embedding_device and self.embedding_config.model_init_params.get("device_map") is None:
@@ -69,6 +70,26 @@ class NVEmbedV2EmbeddingModel(BaseEmbeddingModel):
 
         self.embedding_config = EmbeddingConfig.from_dict(config_dict=config_dict)
         logger.debug(f"Init {self.__class__.__name__}'s embedding_config: {self.embedding_config}")
+
+    def _patch_tied_weights_keys_compat(self) -> None:
+        try:
+            from transformers.modeling_utils import PreTrainedModel
+        except Exception as exc:
+            logger.warning(f"Could not patch transformers tied-weight compatibility: {exc}")
+            return
+
+        if hasattr(PreTrainedModel, "all_tied_weights_keys"):
+            return
+
+        def all_tied_weights_keys(model):
+            tied_weights_keys = getattr(model, "_tied_weights_keys", None)
+            if tied_weights_keys is None:
+                return {}
+            if isinstance(tied_weights_keys, dict):
+                return tied_weights_keys
+            return {key: None for key in tied_weights_keys}
+
+        PreTrainedModel.all_tied_weights_keys = property(all_tied_weights_keys)
 
     # def _add_eos(self, texts: List[str]) -> List[str]:
     #     # Adds EOS token to each text

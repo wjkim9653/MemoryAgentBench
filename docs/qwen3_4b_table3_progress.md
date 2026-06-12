@@ -304,6 +304,11 @@ model is moved directly to `cuda`. This avoids a `transformers/accelerate`
 compatibility issue where NV-Embed-v2 remote code does not expose
 `all_tied_weights_keys` during automatic device-map inference.
 
+Some `transformers` versions also reference `all_tied_weights_keys` during the
+final model-loading step even without `device_map`. The local NV-Embed-v2 wrapper
+patches `PreTrainedModel` with a compatibility property backed by the older
+`_tied_weights_keys` attribute before calling `AutoModel.from_pretrained`.
+
 ### Agentic Memory Candidates
 
 `MemGPT` in the paper maps most closely to the repo's Letta implementation:
