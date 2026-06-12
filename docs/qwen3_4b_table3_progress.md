@@ -360,15 +360,21 @@ than adapting an existing agent.
 `Self-RAG` is the selected immediate Agentic Memory row. The previous
 implementation in `methods/self_rag.py` used `ChatOpenAI`, `OpenAIEmbeddings`,
 FAISS, and LangChain structured outputs. It has been replaced with a
-dependency-light implementation for Qwen/vLLM:
+prompt-based Self-RAG approximation for Qwen/vLLM:
 
 ```text
 methods.self_rag.SelfRAG
   -> BM25-style retrieval over memorized chunks
-  -> optional retrieval decision
-  -> optional retrieved-passage filtering
+  -> selective retrieval decision
+  -> batched retrieved-passage critique
   -> OpenAI-compatible chat completion against Qwen vLLM
+  -> answer support critique
+  -> one optional revision step for unsupported answers
 ```
+
+This does not use an original Self-RAG checkpoint fine-tuned with reflection
+tokens. It should therefore be reported as a prompt-based Self-RAG
+approximation, not as the exact original Self-RAG model implementation.
 
 The prepared Qwen config is:
 
@@ -378,15 +384,19 @@ model: Qwen/Qwen3-4B-Instruct-2507
 provider: openai_compatible
 api_base: http://127.0.0.1:8000/v1
 retrieve_num: 10
-self_rag_force_retrieval: true
-self_rag_filter_retrieved: false
+self_rag_force_retrieval: false
+self_rag_filter_retrieved: true
+self_rag_critique_top_k: 10
+self_rag_enable_support_critique: true
+self_rag_enable_revision: true
 self_rag_max_context_chars: 24000
 ```
 
-This is best understood as a local, Qwen-compatible Self-RAG-lite row. It is not
-identical to the paper's original Self-RAG implementation, but it follows the
-same control-flow family and is much more reliable than Letta/MemGPT under the
-current time constraint.
+The output directory is separated from the earlier lightweight run:
+
+```text
+outputs/qwen3-4b-vllm-self_rag_reflective
+```
 
 ## Pending Items
 

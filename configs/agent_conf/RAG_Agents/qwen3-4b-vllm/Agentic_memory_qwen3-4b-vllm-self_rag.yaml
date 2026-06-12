@@ -7,10 +7,13 @@ api_key: EMPTY
 temperature: 0.7
 input_length_limit: 262144
 buffer_length: 200
-output_dir: ./outputs/qwen3-4b-vllm-self_rag
+output_dir: ./outputs/qwen3-4b-vllm-self_rag_reflective
 
 retrieve_num: 10
 
-self_rag_force_retrieval: true
-self_rag_filter_retrieved: false
+self_rag_force_retrieval: false
+self_rag_filter_retrieved: true
+self_rag_critique_top_k: 10
+self_rag_enable_support_critique: true
+self_rag_enable_revision: true
 self_rag_max_context_chars: 24000

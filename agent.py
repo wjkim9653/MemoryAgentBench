@@ -1095,9 +1095,12 @@ class AgentWrapper:
                 api_base=self.api_base,
                 api_key=self.api_key,
                 max_tokens=self.max_tokens,
-                force_retrieval=self.agent_config.get("self_rag_force_retrieval", True),
-                filter_retrieved=self.agent_config.get("self_rag_filter_retrieved", False),
+                force_retrieval=self.agent_config.get("self_rag_force_retrieval", False),
+                filter_retrieved=self.agent_config.get("self_rag_filter_retrieved", True),
                 max_context_chars=self.agent_config.get("self_rag_max_context_chars", 24000),
+                critique_top_k=self.agent_config.get("self_rag_critique_top_k", self.retrieve_num),
+                enable_support_critique=self.agent_config.get("self_rag_enable_support_critique", True),
+                enable_revision=self.agent_config.get("self_rag_enable_revision", True),
             )
             print(f"\n\nSelf-RAG build vectorstore finished...\n\n")
         else:

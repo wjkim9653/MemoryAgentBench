@@ -30,11 +30,13 @@ class _FallbackRetriever:
 
 
 class SelfRAG:
-    """A dependency-light Self-RAG variant for OpenAI-compatible local LLMs.
+    """Prompt-based Self-RAG approximation for OpenAI-compatible local LLMs.
 
-    The original file depended on OpenAI embeddings, FAISS, and LangChain
-    structured outputs. For local vLLM experiments this implementation keeps the
-    Self-RAG control flow but uses BM25-style retrieval and simple text prompts.
+    This follows the Self-RAG control flow with prompt-level reflection:
+    selective retrieval, retrieved-passage critique, answer support critique,
+    and one optional revision step. It does not require a model fine-tuned with
+    Self-RAG reflection tokens, so it should be reported as a prompt-based
+    approximation rather than the original Self-RAG checkpoint.
     """
 
     def __init__(
@@ -47,9 +49,12 @@ class SelfRAG:
         api_base=None,
         api_key=None,
         max_tokens=256,
-        force_retrieval=True,
-        filter_retrieved=False,
+        force_retrieval=False,
+        filter_retrieved=True,
         max_context_chars=24000,
+        critique_top_k=None,
+        enable_support_critique=True,
+        enable_revision=True,
     ):
         start_time = time.time()
         self.documents = [_document_text(document).replace("\t", " ") for document in documents]
@@ -63,6 +68,9 @@ class SelfRAG:
         self.force_retrieval = force_retrieval
         self.filter_retrieved = filter_retrieved
         self.max_context_chars = max_context_chars
+        self.critique_top_k = critique_top_k or top_k
+        self.enable_support_critique = enable_support_critique
+        self.enable_revision = enable_revision
 
         self.uses_rank_bm25 = False
         self.retriever = self._build_retriever(self.documents)
@@ -90,14 +98,14 @@ class SelfRAG:
             self.uses_rank_bm25 = False
             return _FallbackRetriever(texts)
 
-    def _chat(self, system_prompt: str, user_prompt: str, max_tokens=None) -> str:
+    def _chat(self, system_prompt: str, user_prompt: str, max_tokens=None, temperature=None) -> str:
         response = self.client.chat.completions.create(
             model=self.model_name,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
-            temperature=self.temperature,
+            temperature=self.temperature if temperature is None else temperature,
             max_tokens=max_tokens or self.max_tokens,
         )
         return response.choices[0].message.content.strip()
@@ -125,26 +133,48 @@ class SelfRAG:
         if self.force_retrieval:
             return True
         response = self._chat(
-            "You decide whether retrieval is needed. Answer only Yes or No.",
-            f"Question:\n{retrieval_query}\n\nIs retrieval needed?",
+            (
+                "You are the retrieval controller in a Self-RAG pipeline. "
+                "Answer RETRIEVE if external memory is needed to answer from "
+                "the benchmark memory, otherwise answer NO_RETRIEVE. "
+                "Return exactly one label."
+            ),
+            f"Question:\n{retrieval_query}\n\nLabel:",
             max_tokens=4,
+            temperature=0,
         )
-        return response.lower().startswith("yes")
+        return "retrieve" in response.lower() and "no_retrieve" not in response.lower()
 
     def _filter_contexts(self, retrieval_query: str, contexts: List[str]) -> List[str]:
         if not self.filter_retrieved:
             return contexts
 
+        critique_contexts = contexts[: self.critique_top_k]
+        context_block = self._build_context_block(critique_contexts)
+        response = self._chat(
+            (
+                "You are the passage critic in a Self-RAG pipeline. "
+                "Select only passages that contain evidence useful for answering the question. "
+                "Return passage numbers as a comma-separated list, or NONE."
+            ),
+            f"[Question]\n{retrieval_query}\n\n[Retrieved Passages]\n{context_block}\n\nRelevant passage numbers:",
+            max_tokens=32,
+            temperature=0,
+        )
+        selected_indexes = []
+        if "none" not in response.lower():
+            for token in re.findall(r"\d+", response):
+                index = int(token) - 1
+                if 0 <= index < len(critique_contexts):
+                    selected_indexes.append(index)
+
+        seen = set()
         relevant = []
-        for context in contexts:
-            response = self._chat(
-                "You judge whether a retrieved passage is relevant. Answer only Relevant or Irrelevant.",
-                f"Question:\n{retrieval_query}\n\nPassage:\n{context}\n\nRelevant?",
-                max_tokens=8,
-            )
-            if response.lower().startswith("relevant"):
-                relevant.append(context)
-        return relevant or contexts
+        for index in selected_indexes:
+            if index not in seen:
+                relevant.append(critique_contexts[index])
+                seen.add(index)
+        return relevant or critique_contexts or contexts
 
     def _build_context_block(self, contexts: List[str]) -> str:
         parts = []
@@ -172,13 +202,54 @@ class SelfRAG:
         )
         return self._chat(system_prompt, user_prompt, max_tokens=self.max_tokens)
 
+    def _is_supported(self, query: str, answer: str, context_block: str) -> bool:
+        if not self.enable_support_critique:
+            return True
+
+        response = self._chat(
+            (
+                "You are the answer critic in a Self-RAG pipeline. "
+                "Judge whether the answer is fully supported by the retrieved memory "
+                "and follows the question rules. Return SUPPORTED or UNSUPPORTED only."
+            ),
+            (
+                f"[Retrieved Memory]\n{context_block}\n\n"
+                f"[Question]\n{query}\n\n"
+                f"[Answer]\n{answer}\n\n"
+                "Judgment:"
+            ),
+            max_tokens=8,
+            temperature=0,
+        )
+        normalized = response.lower()
+        return "supported" in normalized and "unsupported" not in normalized
+
+    def _revise(self, query: str, answer: str, context_block: str) -> str:
+        if not self.enable_revision:
+            return answer
+
+        system_prompt = (
+            "You revise unsupported Self-RAG answers. "
+            "Use only the retrieved memory and the rules in the question. "
+            "If the earlier answer used real-world knowledge not supported by memory, replace it. "
+            "Give a concise final answer without explanation."
+        )
+        user_prompt = (
+            f"[Retrieved Memory]\n{context_block}\n\n"
+            f"[Question]\n{query}\n\n"
+            f"[Unsupported Draft Answer]\n{answer}\n\n"
+            "Revised final answer:"
+        )
+        return self._chat(system_prompt, user_prompt, max_tokens=self.max_tokens)
+
     def run(self, query):
         start_time = time.time()
         retrieval_query = self._extract_retrieval_query(query)
 
+        retrieved_contexts = []
         if self._needs_retrieval(retrieval_query):
-            contexts = self._retrieve(retrieval_query)
-            contexts = self._filter_contexts(retrieval_query, contexts)
+            retrieved_contexts = self._retrieve(retrieval_query)
+            contexts = self._filter_contexts(retrieval_query, retrieved_contexts)
         else:
             contexts = []
 
@@ -187,6 +258,13 @@ class SelfRAG:
             context_block = "No relevant memory was retrieved."
 
         response = self._generate(query, context_block)
+        if not self._is_supported(query, response, context_block):
+            revision_contexts = contexts or retrieved_contexts
+            revision_context_block = self._build_context_block(revision_contexts)
+            if not revision_context_block:
+                revision_context_block = context_block
+            response = self._revise(query, response, revision_context_block)
+            contexts = revision_contexts
         memory_construction_time = 0
         if not self._memory_time_reported:
             memory_construction_time = self.memory_construction_time
