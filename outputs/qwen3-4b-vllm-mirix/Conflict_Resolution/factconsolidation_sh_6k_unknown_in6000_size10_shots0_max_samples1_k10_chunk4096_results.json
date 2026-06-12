@@ -1,0 +1,113 @@
+{
+    "agent_config": {
+        "agent_name": "Agentic_memory_mirix",
+        "model": "Qwen/Qwen3-4B-Instruct-2507",
+        "tokenizer_model": "Qwen/Qwen3-4B-Instruct-2507",
+        "provider": "openai_compatible",
+        "api_base": "http://127.0.0.1:8000/v1",
+        "api_key": "EMPTY",
+        "temperature": 0.7,
+        "input_length_limit": 262144,
+        "buffer_length": 5000,
+        "output_dir": "./outputs/qwen3-4b-vllm-mirix",
+        "retrieve_num": 10,
+        "agent_chunk_size": 4096,
+        "mirix_use_controller": true,
+        "mirix_use_extractor": true,
+        "mirix_max_extracted_memories": 8,
+        "mirix_extraction_max_tokens": 512,
+        "mirix_controller_max_tokens": 160,
+        "mirix_max_context_chars": 24000
+    },
+    "dataset_config": {
+        "dataset": "Conflict_Resolution",
+        "chunk_size": 4096,
+        "debug": false,
+        "seed": 42,
+        "context_max_length": 6000,
+        "sub_dataset": "factconsolidation_sh_6k",
+        "generation_max_length": 10,
+        "test_files": "",
+        "demo_files": "",
+        "use_chat_template": true,
+        "max_test_samples": 1,
+        "shots": 0,
+        "tag": null,
+        "max_test_queries": 1
+    },
+    "data": [
+        {
+            "output": "Association football",
+            "input_len": 206,
+            "output_len": 2,
+            "memory_construction_time": 6.2911388874053955,
+            "query_time_len": 0.20115017890930176,
+            "retrieval_context": "Memory 1 [semantic #2 | extracted]\nJohn Harkes is associated with the sport of association football.\nRationale: A factual association between a person and a sport, representing general knowledge.",
+            "parsed_output": "Association football",
+            "exact_match": false,
+            "f1": 0,
+            "substring_exact_match": false,
+            "rougeL_f1": 0.0,
+            "rougeL_recall": 0.0,
+            "rougeLsum_f1": 0.0,
+            "rougeLsum_recall": 0.0,
+            "answer": [
+                "pes\u00e4pallo"
+            ],
+            "query": "Pretend you are a knowledge management system. Each fact in the  Archival Memory is provided with a serial number at the beginning, and the newer fact has larger serial number. \n You need to solve the conflicts of facts in the Archival Memory by finding the newest fact with larger serial number. You need to answer a question based on this rule. You should give a very concise answer without saying other words for the question **only** from the knowledge pool you have memorized rather than the real facts in real world. \n\nFor example:\n\n [Archival Memory] \n\n Question: Based on the Archival Memory, what is the name of the current president of Russia? \nAnswer: Donald Trump \n\n Now Answer the Question: Based on the  Archival Memory, Which sport is goaltender associated with? \nAnswer:",
+            "query_id": 0,
+            "qa_pair_id": "factconsolidation_sh_6k_no0"
+        }
+    ],
+    "metrics": {
+        "exact_match": [
+            false
+        ],
+        "f1": [
+            0
+        ],
+        "substring_exact_match": [
+            false
+        ],
+        "rougeL_f1": [
+            0.0
+        ],
+        "rougeL_recall": [
+            0.0
+        ],
+        "rougeLsum_f1": [
+            0.0
+        ],
+        "rougeLsum_recall": [
+            0.0
+        ],
+        "input_len": [
+            206
+        ],
+        "output_len": [
+            2
+        ],
+        "memory_construction_time": [
+            6.2911388874053955
+        ],
+        "query_time_len": [
+            0.20115017890930176
+        ]
+    },
+    "time_cost": [
+        12.875337839126587
+    ],
+    "averaged_metrics": {
+        "exact_match": 0.0,
+        "f1": 0.0,
+        "substring_exact_match": 0.0,
+        "rougeL_f1": 0.0,
+        "rougeL_recall": 0.0,
+        "rougeLsum_f1": 0.0,
+        "rougeLsum_recall": 0.0,
+        "input_len": 206.0,
+        "output_len": 2.0,
+        "memory_construction_time": 6.2911388874053955,
+        "query_time_len": 0.20115017890930176
+    }
+}

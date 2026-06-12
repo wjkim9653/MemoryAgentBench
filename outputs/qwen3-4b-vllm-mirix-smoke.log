@@ -1,0 +1,54 @@
+................Start................
+agent_config=Agentic_memory_qwen3-4b-vllm-mirix.yaml
+dataset_config=Conflict_Resolution/Factconsolidation_sh_6k.yaml
+
+
+Using max_test_queries: 1
+
+
+
+
+Using agent-specific chunk_size: 4096
+
+
+06/12/2026 04:00:22 - INFO - conversation_creator - Running test on factconsolidation_sh_6k
+Dataset: factconsolidation_sh_6k
+Loading factconsolidation_sh_6k from Hugging Face dataset: ai-hyz/MemoryAgentBench
+Loaded 8 samples from Conflict_Resolution
+Filtered to 1 samples matching source 'factconsolidation_sh_6k' (from 8 total)
+Dataset length: 1, each sample has 100 qa pairs
+  0%|          | 0/1 [00:00<?, ?it/s]
+
+ Agent Memorizing...
+
+
+
+Processing experiments 1/1:   0%|          | 0/2 [00:00<?, ?it/s][A
+Processing experiments 1/1:  50%|█████     | 1/2 [00:03<00:03,  3.41s/it][A
+Processing experiments 1/1: 100%|██████████| 2/2 [00:06<00:00,  3.10s/it][AProcessing experiments 1/1: 100%|██████████| 2/2 [00:06<00:00,  3.14s/it]
+
+
+ Agent saved...
+
+
+
+!!!!!Processing 100 queries for context 0!!!!!
+
+
+  0%|          | 0/100 [00:00<?, ?it/s][A06/12/2026 04:00:35 - INFO - __main__ - exact_match: 0.00
+06/12/2026 04:00:35 - INFO - __main__ - f1: 0.00
+06/12/2026 04:00:35 - INFO - __main__ - substring_exact_match: 0.00
+06/12/2026 04:00:35 - INFO - __main__ - rougeL_f1: 0.00
+06/12/2026 04:00:35 - INFO - __main__ - rougeL_recall: 0.00
+06/12/2026 04:00:35 - INFO - __main__ - rougeLsum_f1: 0.00
+06/12/2026 04:00:35 - INFO - __main__ - rougeLsum_recall: 0.00
+06/12/2026 04:00:35 - INFO - __main__ - input_len: 206.00
+06/12/2026 04:00:35 - INFO - __main__ - output_len: 2.00
+06/12/2026 04:00:35 - INFO - __main__ - memory_construction_time: 6.29
+06/12/2026 04:00:35 - INFO - __main__ - query_time_len: 0.20
+06/12/2026 04:00:35 - INFO - __main__ - Results saved at ./outputs/qwen3-4b-vllm-mirix/Conflict_Resolution/factconsolidation_sh_6k_unknown_in6000_size10_shots0_max_samples1_k10_chunk4096_results.json
+
+  1%|          | 1/100 [00:00<00:20,  4.86it/s][A  1%|          | 1/100 [00:00<00:20,  4.85it/s]
+100%|██████████| 1/1 [00:08<00:00,  8.42s/it]100%|██████████| 1/1 [00:08<00:00,  8.42s/it]
+06/12/2026 04:00:35 - INFO - __main__ - Total time taken: 12.902809381484985
+................End................
