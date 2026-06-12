@@ -182,6 +182,9 @@ def main():
     metrics, results, last_processed_context_id, last_processed_query_id = load_existing_results(
         output_path, dataset_config, all_query_answer_pairs
     )
+    if args.force:
+        metrics, results = defaultdict(list), []
+        last_processed_context_id, last_processed_query_id = 0, 0
     
     # Start evaluation loop - process each context and its associated queries
     query_index = 0  # Tracks total queries processed across all contexts
