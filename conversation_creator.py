@@ -55,10 +55,10 @@ class ConversationCreator:
         Returns:
             int: The chunk size to use for text processing
         """
-        # Memory agents (mem0, letta, cognee) use agent-specific chunk size
+        # Memory agents use agent-specific chunk size
         if agent_config.get('agent_chunk_size') is not None:
             assert any(agent_name in agent_config['agent_name'] 
-                      for agent_name in ["mem0", "letta", "cognee", "zep"]), \
+                      for agent_name in ["mem0", "letta", "mirix", "cognee", "zep"]), \
                    "agent_chunk_size should only be set for memory agents"
             
             chunk_size = agent_config['agent_chunk_size']

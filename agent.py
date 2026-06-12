@@ -100,6 +100,8 @@ class AgentWrapper:
             self._initialize_long_context_agent()
         elif self._is_agent_type("letta"):
             self._initialize_letta_agent(agent_config, dataset_config)
+        elif self._is_agent_type("mirix"):
+            self._initialize_mirix_agent(agent_config, dataset_config)
         elif self._is_agent_type("mem0"):
             self._initialize_mem0_agent(agent_config, dataset_config)
         elif self._is_agent_type("cognee"):
@@ -189,22 +191,13 @@ class AgentWrapper:
             self.letta_mode = agent_config['letta_mode']
             
             self.client = create_client()
-            self.client.set_default_llm_config(LLMConfig.default_config(agent_config['model']))             
+            self.client.set_default_llm_config(self._build_letta_llm_config(agent_config, LLMConfig))
             self.agent_start_time = time.time()
             
             # Configure embedding
-            if agent_config['text_embedding'] == 'text-embedding-3-small':
-                self.client.set_default_embedding_config(EmbeddingConfig(
-                    embedding_model="text-embedding-3-small",
-                    embedding_endpoint_type="openai",
-                    embedding_endpoint="https://api.openai.com/v1",
-                    embedding_dim=1536,
-                    embedding_chunk_size=self.chunk_size * 2,
-                ))
-            else:
-                self.client.set_default_embedding_config(
-                    EmbeddingConfig.default_config(agent_config['text_embedding'])
-                )
+            self.client.set_default_embedding_config(
+                self._build_letta_embedding_config(agent_config, EmbeddingConfig)
+            )
 
             # Load system prompt
             system_path = agent_config['system_path']
@@ -257,6 +250,65 @@ class AgentWrapper:
             model=f"openai/{agent_config['model']}",
             embedding=f"openai/{agent_config['text_embedding']}"
         )
+
+    def _build_letta_llm_config(self, agent_config, llm_config_cls):
+        if self.provider == "openai_compatible":
+            return llm_config_cls(
+                model=agent_config["model"],
+                model_endpoint_type=agent_config.get("letta_llm_endpoint_type", "openai"),
+                model_endpoint=agent_config.get("letta_llm_endpoint", self.api_base),
+                model_wrapper=agent_config.get("letta_model_wrapper"),
+                context_window=agent_config.get("letta_context_window", min(self.input_length_limit, 32768)),
+                put_inner_thoughts_in_kwargs=agent_config.get("letta_put_inner_thoughts_in_kwargs", True),
+                handle=agent_config.get("letta_handle", f"vllm/{agent_config['model']}"),
+                temperature=self.temperature,
+                max_tokens=self.max_tokens,
+            )
+        return llm_config_cls.default_config(agent_config["model"])
+
+    def _build_letta_embedding_config(self, agent_config, embedding_config_cls):
+        if "letta_embedding_endpoint_type" in agent_config:
+            return embedding_config_cls(
+                embedding_model=agent_config["text_embedding"],
+                embedding_endpoint_type=agent_config["letta_embedding_endpoint_type"],
+                embedding_endpoint=agent_config.get("letta_embedding_endpoint"),
+                embedding_dim=agent_config.get("letta_embedding_dim", 1536),
+                embedding_chunk_size=agent_config.get("letta_embedding_chunk_size", self.chunk_size * 2),
+                handle=agent_config.get("letta_embedding_handle"),
+            )
+        if agent_config["text_embedding"] == "text-embedding-3-small":
+            return embedding_config_cls(
+                embedding_model="text-embedding-3-small",
+                embedding_endpoint_type="openai",
+                embedding_endpoint="https://api.openai.com/v1",
+                embedding_dim=1536,
+                embedding_chunk_size=self.chunk_size * 2,
+            )
+        return embedding_config_cls.default_config(agent_config["text_embedding"])
+
+    def _initialize_mirix_agent(self, agent_config, dataset_config):
+        """Initialize a MIRIX-style multi-memory agent."""
+        from methods.mirix import MirixMemoryAgent
+
+        self.chunk_size = agent_config["agent_chunk_size"]
+        self.retrieve_num = agent_config["retrieve_num"]
+        self.context = ""
+        self.mirix_agent = MirixMemoryAgent(
+            model_name=self.model,
+            provider=self.provider,
+            api_base=self.api_base,
+            api_key=self.api_key,
+            temperature=self.temperature,
+            max_tokens=self.max_tokens,
+            retrieve_num=self.retrieve_num,
+            extraction_max_tokens=agent_config.get("mirix_extraction_max_tokens", 512),
+            controller_max_tokens=agent_config.get("mirix_controller_max_tokens", 160),
+            max_context_chars=agent_config.get("mirix_max_context_chars", 24000),
+            max_extracted_memories=agent_config.get("mirix_max_extracted_memories", 8),
+            use_controller=agent_config.get("mirix_use_controller", True),
+            use_extractor=agent_config.get("mirix_use_extractor", True),
+        )
+        self.agent_start_time = time.time()
 
             
             
@@ -317,7 +369,7 @@ class AgentWrapper:
         # Route to appropriate agent handler based on agent type
         if 'Long_context_agent' in self.agent_name:
             return self._handle_long_context_agent(message, memorizing)
-        elif any(self._is_agent_type(agent_type) for agent_type in ["letta", "cognee", "mem0", "zep"]):
+        elif any(self._is_agent_type(agent_type) for agent_type in ["letta", "mirix", "cognee", "mem0", "zep"]):
             return self._handle_memory_agent(message, memorizing, query_id, context_id)
         elif self._is_agent_type("rag"):
             return self._handle_rag_agent(message, memorizing, query_id, context_id)
@@ -443,6 +495,8 @@ class AgentWrapper:
         """Handle message processing for memory-based agents (Letta, Cognee, Mem0)."""
         if self._is_agent_type("letta"):
             return self._handle_letta_agent(message, memorizing, query_id, context_id)
+        elif self._is_agent_type("mirix"):
+            return self._handle_mirix_agent(message, memorizing, query_id, context_id)
         elif self._is_agent_type("cognee"):
             return self._handle_cognee_agent(message, memorizing, query_id, context_id)
         elif self._is_agent_type("mem0"):
@@ -492,8 +546,6 @@ class AgentWrapper:
     
     def _process_letta_message(self, formatted_message, memorizing, query_id, context_id):
         """Process message with Letta client based on mode."""
-        from letta_client import Letta, MessageCreate
-        
         try:
             if self.letta_mode == 'insert':
                 if memorizing:
@@ -511,7 +563,7 @@ class AgentWrapper:
                         message=formatted_message,
                         role='user')
                     ## save response.messages to a file / for debugging as JSON     
-                    return json.loads(response.messages[-3].tool_call.arguments)['message']
+                    return self._extract_letta_visible_message(response)
             
             elif self.letta_mode == 'chat':
                 response = self.client.send_message(
@@ -523,8 +575,9 @@ class AgentWrapper:
                     return "Memorized"
                 else:
                     ## save response.messages to a file / for debugging as JSON    
-                    return json.loads(response.messages[-3].tool_call.arguments)['message']
+                    return self._extract_letta_visible_message(response)
             elif self.letta_mode == 'api':
+                from letta_client import MessageCreate
                 response = self.client.agents.messages.create(
                     agent_id=self.agent_state.id,
                     messages=[
@@ -539,6 +592,49 @@ class AgentWrapper:
         except Exception as e:
             print(f"\n\n\nerror: {e}\n\n\n")
             return "Error"
+
+    def _extract_letta_visible_message(self, response):
+        messages = getattr(response, "messages", [])
+        for message in reversed(messages):
+            tool_call = getattr(message, "tool_call", None)
+            if tool_call and getattr(tool_call, "arguments", None):
+                try:
+                    arguments = json.loads(tool_call.arguments)
+                    if "message" in arguments:
+                        return arguments["message"]
+                except Exception:
+                    pass
+            content = getattr(message, "content", None)
+            if isinstance(content, str) and content.strip():
+                return content.strip()
+        return str(response)
+
+    def _handle_mirix_agent(self, message, memorizing, query_id, context_id):
+        """Handle a MIRIX-style multi-memory agent."""
+        if memorizing:
+            memorize_template = get_template(self.sub_dataset, "memorize", self.agent_name)
+            formatted_message = memorize_template.format(
+                context=message,
+                **({"time_stamp": time.strftime("%Y-%m-%d %H:%M:%S")} if "{time_stamp}" in memorize_template else {}),
+            )
+            self.mirix_agent.memorize(formatted_message)
+            self.context += "\n" + formatted_message
+            self.context = self.context.strip()
+            return "Memorized"
+
+        memory_construction_time = time.time() - self.agent_start_time
+        response, retrieval_context, query_time_len = self.mirix_agent.answer(message)
+        tokenizer = self.tokenizer
+        output = self._create_standard_response(
+            response,
+            len(self._encode_text(retrieval_context + "\n" + message, tokenizer)),
+            len(self._encode_text(response, tokenizer)),
+            memory_construction_time,
+            query_time_len,
+        )
+        output["retrieval_context"] = retrieval_context
+        self.agent_start_time = time.time()
+        return output
 
     def _handle_cognee_agent(self, message, memorizing, query_id, context_id):
         """Handle message processing for Cognee agents."""
@@ -1186,8 +1282,8 @@ class AgentWrapper:
         
     def save_agent(self):
         """Save agent state to disk for persistence."""
-        # Currently only implemented for Letta agents
-        if not self._is_agent_type("letta") and not self._is_agent_type("zep"):
+        # Currently only implemented for stateful memory agents
+        if not self._is_agent_type("letta") and not self._is_agent_type("mirix") and not self._is_agent_type("zep"):
             print("\n\n Agent not saved (not implemented for this agent type) \n\n")
             return
         
@@ -1210,6 +1306,8 @@ class AgentWrapper:
             os.makedirs(self.agent_save_to_folder, exist_ok=True)
             with open(f"{self.agent_save_to_folder}/messages.txt", "w") as f:
                 f.write(messages)
+        elif self._is_agent_type("mirix"):
+            self.mirix_agent.save(self.agent_save_to_folder)
                 
         print("\n\n Agent saved...\n\n")
 
@@ -1218,7 +1316,7 @@ class AgentWrapper:
         agent_save_folder = self.agent_save_to_folder
         assert os.path.exists(agent_save_folder), f"Folder {agent_save_folder} does not exist."
 
-        if not self._is_agent_type("letta") and not self._is_agent_type("zep"):
+        if not self._is_agent_type("letta") and not self._is_agent_type("mirix") and not self._is_agent_type("zep"):
             print("\n\nAgent loading not implemented for this agent type\n\n")
             return None
 
@@ -1243,6 +1341,8 @@ class AgentWrapper:
             os.makedirs(self.agent_save_to_folder, exist_ok=True)
             with open(f"{self.agent_save_to_folder}/messages.txt", "r") as f:
                 messages = f.read()
+        elif self._is_agent_type("mirix"):
+            self.mirix_agent.load(self.agent_save_to_folder)
         
         print("\n\n Agent loaded successfully...\n\n")
         

@@ -416,5 +416,44 @@ python llm_based_eval/longmem_qa_evaluate.py --evaluated_method qwen3-4b-vllm-bm
 - Run summarization judge for `InfBench_sum` when cost is acceptable.
 - Run the Self-RAG smoke script, then the Self-RAG Table 3 script if the smoke
   result looks sane.
+- Run MemGPT/Letta smoke after a Qwen embedding endpoint is available:
+
+```bash
+curl http://127.0.0.1:8000/v1/models
+curl http://127.0.0.1:8001/v1/models
+bash bash_files/sh/run_qwen3_4b_vllm_letta_smoke.sh 2>&1 | tee outputs/qwen3-4b-vllm-letta-smoke.log
+```
+
+The Qwen Letta config maps the paper's MemGPT row to the repo's Letta
+implementation:
+
+```text
+configs/agent_conf/RAG_Agents/qwen3-4b-vllm/Agentic_memory_qwen3-4b-vllm-letta.yaml
+```
+
+It uses Qwen3-4B through the OpenAI-compatible vLLM endpoint at
+`http://127.0.0.1:8000/v1` and expects a separate OpenAI-compatible embedding
+endpoint at `http://127.0.0.1:8001/v1`, currently configured for
+`Qwen/Qwen3-Embedding-4B`.
+
+- Run MIRIX smoke:
+
+```bash
+bash bash_files/sh/run_qwen3_4b_vllm_mirix_smoke.sh 2>&1 | tee outputs/qwen3-4b-vllm-mirix-smoke.log
+```
+
+The repo did not contain a first-class MIRIX implementation, so the Qwen MIRIX
+row is implemented as a prompt-based approximation in:
+
+```text
+methods/mirix.py
+configs/agent_conf/RAG_Agents/qwen3-4b-vllm/Agentic_memory_qwen3-4b-vllm-mirix.yaml
+```
+
+It keeps six MIRIX-style typed memory stores (`core`, `episodic`, `semantic`,
+`procedural`, `resource`, `knowledge_vault`), uses a Qwen controller/extractor
+for memory updates and retrieval planning, then answers from retrieved typed
+memories.
+
 - Revisit HippoRAG-v2 later with either a pinned compatible `transformers`
   version or a different embedding backend.

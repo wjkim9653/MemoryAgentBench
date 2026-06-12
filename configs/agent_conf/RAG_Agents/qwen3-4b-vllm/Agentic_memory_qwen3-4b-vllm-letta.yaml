@@ -1,0 +1,27 @@
+agent_name: Agentic_memory_letta
+model: Qwen/Qwen3-4B-Instruct-2507
+tokenizer_model: Qwen/Qwen3-4B-Instruct-2507
+provider: openai_compatible
+api_base: http://127.0.0.1:8000/v1
+api_key: EMPTY
+text_embedding: Qwen/Qwen3-Embedding-4B
+system_path: ./configs/agent_conf/letta_system.txt
+temperature: 0.7
+input_length_limit: 262144
+buffer_length: 5000
+output_dir: ./outputs/qwen3-4b-vllm-letta
+
+agent_chunk_size: 4096
+letta_mode: insert
+
+letta_llm_endpoint_type: openai
+letta_llm_endpoint: http://127.0.0.1:8000/v1
+letta_context_window: 32768
+letta_handle: vllm/Qwen/Qwen3-4B-Instruct-2507
+letta_put_inner_thoughts_in_kwargs: true
+
+letta_embedding_endpoint_type: hugging-face
+letta_embedding_endpoint: http://127.0.0.1:8001/v1
+letta_embedding_dim: 2560
+letta_embedding_chunk_size: 8192
+letta_embedding_handle: vllm/Qwen/Qwen3-Embedding-4B

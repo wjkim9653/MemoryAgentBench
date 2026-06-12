@@ -9,6 +9,8 @@ ROWS = {
     "Qwen3-4B BM25": "outputs/qwen3-4b-vllm-bm25",
     "Qwen3-4B HippoRAG-v2": "outputs/qwen3-4b-vllm-hippo_rag_v2_nv",
     "Qwen3-4B Self-RAG": "outputs/qwen3-4b-vllm-self_rag_reflective",
+    "Qwen3-4B MemGPT/Letta": "outputs/qwen3-4b-vllm-letta",
+    "Qwen3-4B MIRIX": "outputs/qwen3-4b-vllm-mirix",
 }
 
 
