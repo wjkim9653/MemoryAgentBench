@@ -123,6 +123,49 @@ Recommended HippoRAG smoke command on the GPU server:
 bash bash_files/sh/run_qwen3_4b_vllm_hipporag_smoke.sh 2>&1 | tee outputs/qwen3-4b-vllm-hipporag-smoke.log
 ```
 
+If the run fails with:
+
+```text
+ModuleNotFoundError: No module named 'igraph'
+```
+
+install the missing graph dependency in the active uv environment:
+
+```bash
+uv pip install "igraph>=0.11,<0.12"
+python - <<'PY'
+import igraph
+print("igraph", igraph.__version__)
+from methods.hipporag import HippoRAG
+print("HippoRAG import OK")
+PY
+```
+
+If the run fails with:
+
+```text
+ModuleNotFoundError: No module named 'gritlm'
+```
+
+do not install `gritlm` for the NV-Embed-v2 run. `gritlm` is only needed for the
+unused GritLM embedding backend. The local code lazy-loads optional embedding
+backends so that `nvidia/NV-Embed-v2` does not require `gritlm`.
+
+The same principle applies to the offline vLLM OpenIE path: the current online
+OpenIE config calls the existing OpenAI-compatible server over HTTP, so the local
+benchmark environment does not need to import the offline `vllm` backend.
+
+For the current Qwen3-4B + HippoRAG-v2 + NV-Embed-v2 setup, the non-baseline
+packages to check are:
+
+```bash
+uv pip install "igraph>=0.11,<0.12" einops
+```
+
+Most other HippoRAG imports are already part of the base benchmark environment:
+`torch`, `transformers`, `accelerate`, `numpy`, `pandas`, `tqdm`, `openai`,
+`httpx`, `filelock`, `packaging`, `pydantic`, and `tenacity`.
+
 Recommended HippoRAG Table 3 command after the smoke run succeeds:
 
 ```bash
