@@ -1086,7 +1086,19 @@ class AgentWrapper:
         # Build vectorstore if context changed
         if self.context_id != context_id:
             docs = [Document(page_content=t, metadata={"source":"Not provided", "chunk":i}) for i,t in enumerate(self.chunks)]
-            self.self_rag = SelfRAG(documents=docs, temperature=self.temperature, top_k=self.retrieve_num)
+            self.self_rag = SelfRAG(
+                documents=docs,
+                temperature=self.temperature,
+                top_k=self.retrieve_num,
+                model_name=self.model,
+                provider=self.provider,
+                api_base=self.api_base,
+                api_key=self.api_key,
+                max_tokens=self.max_tokens,
+                force_retrieval=self.agent_config.get("self_rag_force_retrieval", True),
+                filter_retrieved=self.agent_config.get("self_rag_filter_retrieved", False),
+                max_context_chars=self.agent_config.get("self_rag_max_context_chars", 24000),
+            )
             print(f"\n\nSelf-RAG build vectorstore finished...\n\n")
         else:
             print(f"\n\nContext {context_id} already processed, skipping Self-RAG build vectorstore...\n\n")

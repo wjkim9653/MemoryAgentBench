@@ -17,11 +17,13 @@ Rows prepared but not yet run:
 
 - `Qwen3-4B HippoRAG-v2`: structure-augmented RAG with Qwen3-4B as the
   generator and `nvidia/NV-Embed-v2` as the local embedding model.
+- `Qwen3-4B Self-RAG`: agentic-memory-style Self-RAG row with Qwen3-4B as the
+  generator and BM25-style retrieval.
 
 Rows not yet prepared:
 
 - Embedding RAG agents.
-- Agentic memory agents.
+- Letta/MemGPT-style agentic memory agents.
 
 Columns intentionally skipped for now:
 
@@ -93,6 +95,7 @@ Table 3 reproduction manifests, excluding Recsys:
 bash_files/configs/qwen3_4b_vllm_longcontext_table3.txt
 bash_files/configs/qwen3_4b_vllm_bm25_table3.txt
 bash_files/configs/qwen3_4b_vllm_hipporag_table3.txt
+bash_files/configs/qwen3_4b_vllm_selfrag_table3.txt
 ```
 
 Execution scripts:
@@ -101,6 +104,7 @@ Execution scripts:
 bash_files/sh/run_qwen3_4b_vllm_longcontext_table3.sh
 bash_files/sh/run_qwen3_4b_vllm_bm25_table3.sh
 bash_files/sh/run_qwen3_4b_vllm_hipporag_table3.sh
+bash_files/sh/run_qwen3_4b_vllm_selfrag_table3.sh
 ```
 
 HippoRAG smoke runner:
@@ -108,6 +112,8 @@ HippoRAG smoke runner:
 ```text
 bash_files/configs/qwen3_4b_vllm_hipporag_smoke.txt
 bash_files/sh/run_qwen3_4b_vllm_hipporag_smoke.sh
+bash_files/configs/qwen3_4b_vllm_selfrag_smoke.txt
+bash_files/sh/run_qwen3_4b_vllm_selfrag_smoke.sh
 ```
 
 Commands used on the GPU server:
@@ -121,6 +127,12 @@ Recommended HippoRAG smoke command on the GPU server:
 
 ```bash
 bash bash_files/sh/run_qwen3_4b_vllm_hipporag_smoke.sh 2>&1 | tee outputs/qwen3-4b-vllm-hipporag-smoke.log
+```
+
+Recommended Self-RAG smoke command on the GPU server:
+
+```bash
+bash bash_files/sh/run_qwen3_4b_vllm_selfrag_smoke.sh 2>&1 | tee outputs/qwen3-4b-vllm-selfrag-smoke.log
 ```
 
 If the run fails with:
@@ -184,6 +196,12 @@ Recommended HippoRAG Table 3 command after the smoke run succeeds:
 bash bash_files/sh/run_qwen3_4b_vllm_hipporag_table3.sh 2>&1 | tee outputs/qwen3-4b-vllm-hipporag-table3.log
 ```
 
+Recommended Self-RAG Table 3 command after the smoke run succeeds:
+
+```bash
+bash bash_files/sh/run_qwen3_4b_vllm_selfrag_table3.sh 2>&1 | tee outputs/qwen3-4b-vllm-selfrag-table3.log
+```
+
 Both HippoRAG scripts default to:
 
 ```bash
@@ -234,6 +252,7 @@ python3 utils/aggregate_qwen_table3.py
 | Qwen3-4B LongCtx | 33.0 | 26.0 | 15.0 | 47.4 | 35.5 | 21.4 | PENDING | 31.2 | 30.1 | 0.0 | PENDING | 29.0 | 0.0 | 14.5 | PENDING |
 | Qwen3-4B BM25 | 60.0 | 42.0 | 26.7 | 53.0 | 51.7 | 0.4 | PENDING | 32.8 | 31.8 | 0.0 | PENDING | 40.0 | 3.0 | 21.5 | PENDING |
 | Qwen3-4B HippoRAG-v2 | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING |
+| Qwen3-4B Self-RAG | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING |
 
 ## Relaxed Diagnostics
 
@@ -245,6 +264,7 @@ inside JSON objects, while official `exact_match` is strict.
 |---|---:|---:|---:|---:|---:|---:|---:|
 | Qwen3-4B LongCtx | 94.0 | 87.0 | 80.0 | 74.0 | 67.0 | 80.4 | 73.2 |
 | Qwen3-4B BM25 | 91.0 | 87.0 | 79.0 | 77.0 | 54.0 | 77.6 | 67.6 |
+| Qwen3-4B Self-RAG | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING |
 
 ## Observations
 
@@ -262,6 +282,10 @@ inside JSON objects, while official `exact_match` is strict.
   memory chunks, embeds chunks/entities/facts with `nvidia/NV-Embed-v2`, builds a
   graph, and then performs graph-aware retrieval before QA. The likely bottleneck
   is indexing, especially on 262k contexts.
+- HippoRAG-v2 is currently blocked by NV-Embed-v2 remote-code compatibility with
+  the server's installed `transformers` API. The model loads after local patches,
+  but encode-time cache API mismatches still make it too risky for the immediate
+  experiment window.
 
 ## Advanced Agent Readiness
 
@@ -333,11 +357,36 @@ prepared after HippoRAG is validated.
 repo, so reproducing that row would require adding an external integration rather
 than adapting an existing agent.
 
-`Self-RAG` exists in `methods/self_rag.py`, but the current code is tied to
-`ChatOpenAI`, `OpenAIEmbeddings`, and LangChain structured-output calls. It is
-probably less infrastructure-heavy than Letta, but Qwen/vLLM support requires
-more prompt/output-format work than HippoRAG because multiple internal judges
-route/rewrite/grade with structured outputs.
+`Self-RAG` is the selected immediate Agentic Memory row. The previous
+implementation in `methods/self_rag.py` used `ChatOpenAI`, `OpenAIEmbeddings`,
+FAISS, and LangChain structured outputs. It has been replaced with a
+dependency-light implementation for Qwen/vLLM:
+
+```text
+methods.self_rag.SelfRAG
+  -> BM25-style retrieval over memorized chunks
+  -> optional retrieval decision
+  -> optional retrieved-passage filtering
+  -> OpenAI-compatible chat completion against Qwen vLLM
+```
+
+The prepared Qwen config is:
+
+```yaml
+agent_name: Agentic_memory_self_rag
+model: Qwen/Qwen3-4B-Instruct-2507
+provider: openai_compatible
+api_base: http://127.0.0.1:8000/v1
+retrieve_num: 10
+self_rag_force_retrieval: true
+self_rag_filter_retrieved: false
+self_rag_max_context_chars: 24000
+```
+
+This is best understood as a local, Qwen-compatible Self-RAG-lite row. It is not
+identical to the paper's original Self-RAG implementation, but it follows the
+same control-flow family and is much more reliable than Letta/MemGPT under the
+current time constraint.
 
 ## Pending Items
 
@@ -355,7 +404,7 @@ python llm_based_eval/longmem_qa_evaluate.py --evaluated_method qwen3-4b-vllm-bm
 ```
 
 - Run summarization judge for `InfBench_sum` when cost is acceptable.
-- Run the HippoRAG smoke script, then the HippoRAG Table 3 script if indexing
-  and QA complete successfully.
-- Prepare one Agentic Memory row after HippoRAG. Letta is most faithful to
-  `MemGPT`; Self-RAG is the fallback if Letta setup turns out to be too brittle.
+- Run the Self-RAG smoke script, then the Self-RAG Table 3 script if the smoke
+  result looks sane.
+- Revisit HippoRAG-v2 later with either a pinned compatible `transformers`
+  version or a different embedding backend.

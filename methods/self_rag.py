@@ -1,242 +1,193 @@
 import os
-import sys
-from dotenv import load_dotenv
-from langchain.prompts import PromptTemplate
-from langchain_openai import ChatOpenAI
-from langchain_core.pydantic_v1 import BaseModel, Field
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.vectorstores import FAISS
-from langchain_community.embeddings import OpenAIEmbeddings
-import time
 import re
-
-sys.path.append(os.path.abspath(
-    os.path.join(os.getcwd(), '..')))  # Add the parent directory to the path since we work with notebooks
-
-# Load environment variables from a .env file
-load_dotenv()
-
-# Set the OpenAI API key environment variable
-os.environ["OPENAI_API_KEY"] = os.getenv('OPENAI_API_KEY')
+import time
+from collections import Counter
+from typing import List, Sequence
 
 
-# Define all relevant classes/functions
-class RetrievalResponse(BaseModel):
-    response: str = Field(..., title="Determines if retrieval is necessary", description="Output only 'Yes' or 'No'.")
+def _tokenize(text: str) -> List[str]:
+    return re.findall(r"[A-Za-z0-9_]+", text.lower())
 
 
-class RelevanceResponse(BaseModel):
-    response: str = Field(..., title="Determines if context is relevant",
-                          description="Output only 'Relevant' or 'Irrelevant'.")
+def _document_text(document) -> str:
+    return getattr(document, "page_content", str(document))
 
 
-class GenerationResponse(BaseModel):
-    response: str = Field(..., title="Generated response", description="The generated response.")
+class _FallbackRetriever:
+    def __init__(self, texts: Sequence[str]):
+        self.texts = list(texts)
+        self.doc_tokens = [_tokenize(text) for text in self.texts]
+        self.doc_counters = [Counter(tokens) for tokens in self.doc_tokens]
+
+    def get_top_n(self, query_tokens: List[str], n: int) -> List[str]:
+        query_counts = Counter(query_tokens)
+        scored = []
+        for index, counter in enumerate(self.doc_counters):
+            score = sum(counter[token] * query_counts[token] for token in query_counts)
+            scored.append((score, index))
+        scored.sort(key=lambda item: item[0], reverse=True)
+        return [self.texts[index] for score, index in scored[:n] if score > 0] or self.texts[:n]
 
 
-class SupportResponse(BaseModel):
-    response: str = Field(..., title="Determines if response is supported",
-                          description="Output 'Fully supported', 'Partially supported', or 'No support'.")
-
-
-class UtilityResponse(BaseModel):
-    response: int = Field(..., title="Utility rating", description="Rate the utility of the response from 1 to 5.")
-
-
-# Define prompt templates
-retrieval_prompt = PromptTemplate(
-    input_variables=["query"],
-    template="Given the query '{query}', determine if retrieval is necessary. Output only 'Yes' or 'No'."
-)
-
-relevance_prompt = PromptTemplate(
-    input_variables=["query", "context"],
-    template="Given the query '{query}' and the context '{context}', determine if the context is relevant. Output only 'Relevant' or 'Irrelevant'."
-)
-
-generation_prompt = PromptTemplate(
-    input_variables=["query", "context"],
-    template="Given the query '{query}' and the context '{context}', generate a response."
-)
-
-support_prompt = PromptTemplate(
-    input_variables=["response", "context"],
-    template="Given the response '{response}' and the context '{context}', determine if the response is supported by the context. Output 'Fully supported', 'Partially supported', or 'No support'."
-)
-
-utility_prompt = PromptTemplate(
-    input_variables=["query", "response"],
-    template="Given the query '{query}' and the response '{response}', rate the utility of the response from 1 to 5."
-)
-
-
-
-def replace_t_with_space(list_of_documents):
-        """
-        Replaces all tab characters ('\t') with spaces in the page content of each document
-
-        Args:
-            list_of_documents: A list of document objects, each with a 'page_content' attribute.
-
-        Returns:
-            The modified list of documents with tab characters replaced by spaces.
-        """
-
-        for doc in list_of_documents:
-            doc.page_content = doc.page_content.replace('\t', ' ')  # Replace tabs with spaces
-        return list_of_documents
-
-def encode_documents(documents, chunk_size=4096, chunk_overlap=200):
-    """
-    Encodes a PDF document into a vector store using hypothetical prompt embeddings.
-
-    Args:
-        documents: The documents to be encoded.
-        chunk_size: The size of each text chunk.
-        chunk_overlap: The overlap between consecutive chunks.
-
-    Returns:
-        A FAISS vector store containing the encoded book content.
-    """
-    # Split documents into chunks
-    text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=chunk_size, chunk_overlap=chunk_overlap, length_function=len
-    )
-    texts = text_splitter.split_documents(documents)
-    cleaned_texts = replace_t_with_space(texts)
-
-    # Create embeddings and vector store
-    embeddings = OpenAIEmbeddings()
-    vectorstore = FAISS.from_documents(cleaned_texts, embeddings)
-
-    return vectorstore
-
-
-
-# Define main class
 class SelfRAG:
-    def __init__(self, documents, temperature=0.7, top_k=3):
-        self.vectorstore = encode_documents(documents=documents)
+    """A dependency-light Self-RAG variant for OpenAI-compatible local LLMs.
+
+    The original file depended on OpenAI embeddings, FAISS, and LangChain
+    structured outputs. For local vLLM experiments this implementation keeps the
+    Self-RAG control flow but uses BM25-style retrieval and simple text prompts.
+    """
+
+    def __init__(
+        self,
+        documents,
+        temperature=0.7,
+        top_k=3,
+        model_name="gpt-4o-mini",
+        provider=None,
+        api_base=None,
+        api_key=None,
+        max_tokens=256,
+        force_retrieval=True,
+        filter_retrieved=False,
+        max_context_chars=24000,
+    ):
+        start_time = time.time()
+        self.documents = [_document_text(document).replace("\t", " ") for document in documents]
+        self.temperature = temperature
         self.top_k = top_k
-        self.llm = ChatOpenAI(model="gpt-4o-mini", max_tokens=1000, temperature=temperature)
+        self.model_name = model_name
+        self.provider = provider
+        self.api_base = api_base
+        self.api_key = api_key or os.environ.get("OPENAI_API_KEY") or "EMPTY"
+        self.max_tokens = max_tokens
+        self.force_retrieval = force_retrieval
+        self.filter_retrieved = filter_retrieved
+        self.max_context_chars = max_context_chars
 
-        # Create LLMChains for each step
-        self.retrieval_chain = retrieval_prompt | self.llm.with_structured_output(RetrievalResponse)
-        self.relevance_chain = relevance_prompt | self.llm.with_structured_output(RelevanceResponse)
-        self.generation_chain = generation_prompt | self.llm.with_structured_output(GenerationResponse)
-        self.support_chain = support_prompt | self.llm.with_structured_output(SupportResponse)
-        self.utility_chain = utility_prompt | self.llm.with_structured_output(UtilityResponse)
-        self.start_time = time.time()
-        
-        
-    def run(self, query):
-        print(f"\nProcessing query: {query}")
+        self.uses_rank_bm25 = False
+        self.retriever = self._build_retriever(self.documents)
+        self.client = self._build_client()
+        self.memory_construction_time = time.time() - start_time
+        self._memory_time_reported = False
 
-        # Step 1: Determine if retrieval is necessary
-        print("Step 1: Determining if retrieval is necessary...")
-        
-        ## Step 1.1: find the "Question" in the message
-        match = re.search(r"Now Answer the Question:\s*(.*)", query, re.DOTALL)
-        if match:
-            retrieval_query =  ''.join(match.groups())
-        else:
-            match = re.search(r"Here is the conversation:\s*(.*)", query, re.DOTALL)
+    def _build_client(self):
+        from openai import OpenAI
+
+        if self.provider == "openai_compatible":
+            return OpenAI(api_key=self.api_key, base_url=self.api_base)
+        return OpenAI(api_key=self.api_key)
+
+    def _build_retriever(self, texts):
+        if not texts:
+            return _FallbackRetriever([])
+        try:
+            from rank_bm25 import BM25Okapi
+
+            tokenized = [_tokenize(text) for text in texts]
+            self.uses_rank_bm25 = True
+            return BM25Okapi(tokenized)
+        except Exception:
+            self.uses_rank_bm25 = False
+            return _FallbackRetriever(texts)
+
+    def _chat(self, system_prompt: str, user_prompt: str, max_tokens=None) -> str:
+        response = self.client.chat.completions.create(
+            model=self.model_name,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=self.temperature,
+            max_tokens=max_tokens or self.max_tokens,
+        )
+        return response.choices[0].message.content.strip()
+
+    def _extract_retrieval_query(self, query: str) -> str:
+        patterns = [
+            r"Now Answer the Question:\s*(.*)",
+            r"Here is the conversation:\s*(.*)",
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, query, re.DOTALL)
             if match:
-                retrieval_query =  ''.join(match.groups())
-            else:
-                retrieval_query = query
-        print(f"\n\nRetrieval query: {retrieval_query}\n\n")
-        
-        ## Step 1.2: decide if retrieval is necessary
-        input_data = {"query": retrieval_query}        
-        retrieval_decision = self.retrieval_chain.invoke(input_data).response.strip().lower() #retrieval
-        print(f"Retrieval decision: {retrieval_decision}")
+                return match.group(1).strip()
+        return query.strip()
 
-        if retrieval_decision == 'yes':
-            # Step 2: Retrieve relevant documents
-            print("Step 2: Retrieving relevant documents...")
-            docs = self.vectorstore.similarity_search(retrieval_query, k=self.top_k)
-            contexts = [doc.page_content for doc in docs]
-            print(f"Retrieved {len(contexts)} documents")
+    def _retrieve(self, retrieval_query: str) -> List[str]:
+        if not self.documents:
+            return []
+        query_tokens = _tokenize(retrieval_query)
+        if self.uses_rank_bm25:
+            return self.retriever.get_top_n(query_tokens, self.documents, n=self.top_k)
+        return self.retriever.get_top_n(query_tokens, self.top_k)
 
-            # Step 3: Evaluate relevance of retrieved documents
-            print("Step 3: Evaluating relevance of retrieved documents...")
-            relevant_contexts = []
-            for i, context in enumerate(contexts):
-                input_data = {"query": retrieval_query, "context": context}
-                relevance = self.relevance_chain.invoke(input_data).response.strip().lower() #retrieval
-                print(f"Document {i + 1} relevance: {relevance}")
-                if relevance == 'relevant':
-                    relevant_contexts.append(context)
+    def _needs_retrieval(self, retrieval_query: str) -> bool:
+        if self.force_retrieval:
+            return True
+        response = self._chat(
+            "You decide whether retrieval is needed. Answer only Yes or No.",
+            f"Question:\n{retrieval_query}\n\nIs retrieval needed?",
+            max_tokens=4,
+        )
+        return response.lower().startswith("yes")
 
-            print(f"Number of relevant contexts: {len(relevant_contexts)}")
+    def _filter_contexts(self, retrieval_query: str, contexts: List[str]) -> List[str]:
+        if not self.filter_retrieved:
+            return contexts
 
-            # If no relevant contexts found, generate without retrieval
-            memory_construction_time = time.time() - self.start_time
-            if not relevant_contexts:
-                print("No relevant contexts found. Generating without retrieval...")
-                input_data = {"query": query, "context": "No relevant context found."}
-                
-                return self.generation_chain.invoke(input_data).response, "No relevant context found.", memory_construction_time, (time.time() - self.start_time - memory_construction_time)
+        relevant = []
+        for context in contexts:
+            response = self._chat(
+                "You judge whether a retrieved passage is relevant. Answer only Relevant or Irrelevant.",
+                f"Question:\n{retrieval_query}\n\nPassage:\n{context}\n\nRelevant?",
+                max_tokens=8,
+            )
+            if response.lower().startswith("relevant"):
+                relevant.append(context)
+        return relevant or contexts
 
-            
-            
-            # Step 4: Generate response using relevant contexts
-            print("Step 4: Generating responses using relevant contexts...")
-            responses = []
-            for i, context in enumerate(relevant_contexts):
-                print(f"Generating response for context {i + 1}...")
-                input_data = {"query": query, "context": context}
-                response = self.generation_chain.invoke(input_data).response
+    def _build_context_block(self, contexts: List[str]) -> str:
+        parts = []
+        total_chars = 0
+        for index, context in enumerate(contexts, start=1):
+            block = f"Passage {index}:\n{context.strip()}"
+            if total_chars + len(block) > self.max_context_chars:
+                break
+            parts.append(block)
+            total_chars += len(block)
+        return "\n\n".join(parts)
 
-                # Step 5: Assess support
-                print(f"Step 5: Assessing support for response {i + 1}...")
-                input_data = {"response": response, "context": context}
-                support = self.support_chain.invoke(input_data).response.strip().lower()
-                print(f"Support assessment: {support}")
+    def _generate(self, query: str, context_block: str) -> str:
+        system_prompt = (
+            "You are a memory agent answering benchmark questions. "
+            "Use only the provided retrieved memory passages and the rules in the question. "
+            "Give a concise answer without extra explanation."
+        )
+        user_prompt = (
+            f"[Retrieved Memory]\n{context_block}\n\n"
+            f"[Question]\n{query}\n\n"
+            "Answer concisely:"
+        )
+        return self._chat(system_prompt, user_prompt, max_tokens=self.max_tokens)
 
-                # Step 6: Evaluate utility
-                print(f"Step 6: Evaluating utility for response {i + 1}...")
-                input_data = {"query": query, "response": response}
-                utility = int(self.utility_chain.invoke(input_data).response)
-                print(f"Utility score: {utility}")
+    def run(self, query):
+        start_time = time.time()
+        retrieval_query = self._extract_retrieval_query(query)
 
-                responses.append((response, support, utility))
-
-            # Select the best response based on support and utility
-            print("Selecting the best response...")
-            best_response = max(responses, key=lambda x: (x[1] == 'fully supported', x[2]))
-            print(f"Best response support: {best_response[1]}, utility: {best_response[2]}")
-            query_time_len = time.time() - self.start_time - memory_construction_time
-            return best_response[0], relevant_contexts, memory_construction_time, query_time_len
+        if self._needs_retrieval(retrieval_query):
+            contexts = self._retrieve(retrieval_query)
+            contexts = self._filter_contexts(retrieval_query, contexts)
         else:
-            # Generate without retrieval
-            print("Generating without retrieval...")
-            input_data = {"query": query, "context": "No retrieval necessary."}
-            memory_construction_time = time.time() - self.start_time
-            query_time_len = time.time() - self.start_time - memory_construction_time
-            
-            # Generate response
-            return self.generation_chain.invoke(input_data).response, "No retrieval necessary.", memory_construction_time, query_time_len
+            contexts = []
 
+        context_block = self._build_context_block(contexts)
+        if not context_block:
+            context_block = "No relevant memory was retrieved."
 
-# Argument parsing functions
-def parse_args():
-    import argparse
-    parser = argparse.ArgumentParser(description="Self-RAG method")
-    parser.add_argument('--path', type=str, default='../data/Understanding_Climate_Change.pdf',
-                        help='Path to the PDF file for vector store')
-    parser.add_argument('--query', type=str, default='What is the impact of climate change on the environment?',
-                        help='Query to be processed')
-    return parser.parse_args()
-
-
-# Main entry point
-if __name__ == "__main__":
-    #args = parse_args()
-    #rag = SelfRAG(path=args.path)
-    #response = rag.run(args.query)
-    #print("\nFinal response:")
-    #print(response)
-    
-    pass
+        response = self._generate(query, context_block)
+        memory_construction_time = 0
+        if not self._memory_time_reported:
+            memory_construction_time = self.memory_construction_time
+            self._memory_time_reported = True
+        query_time_len = time.time() - start_time
+        return response, contexts, memory_construction_time, query_time_len
