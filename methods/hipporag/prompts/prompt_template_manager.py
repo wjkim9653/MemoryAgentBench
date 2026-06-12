@@ -1,5 +1,6 @@
 import os
 import asyncio
+import importlib
 import importlib.util
 from string import Template
 from typing import Dict, List, Union, Any, Optional
@@ -61,12 +62,8 @@ class PromptTemplateManager:
                 script_name = os.path.splitext(filename)[0]
 
                 try:
-                    try:
-                        module_name = f"src.hipporag.prompts.templates.{script_name}"
-                        module = importlib.import_module(module_name)
-                    except ModuleNotFoundError:
-                        module_name = f".prompts.templates.{script_name}"
-                        module = importlib.import_module(module_name, 'hipporag')
+                    module_name = f"methods.hipporag.prompts.templates.{script_name}"
+                    module = importlib.import_module(module_name)
 
                     # spec = importlib.util.spec_from_file_location(script_name, script_path)
                     # module = importlib.util.module_from_spec(spec)

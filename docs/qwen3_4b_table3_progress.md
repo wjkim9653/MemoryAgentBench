@@ -155,6 +155,18 @@ The same principle applies to the offline vLLM OpenIE path: the current online
 OpenIE config calls the existing OpenAI-compatible server over HTTP, so the local
 benchmark environment does not need to import the offline `vllm` backend.
 
+If the run fails with:
+
+```text
+ModuleNotFoundError: No module named 'hipporag'
+```
+
+this comes from the vendored HippoRAG prompt loader using upstream package names.
+The local code should import templates via `methods.hipporag.prompts.templates`,
+not an installed `hipporag` package. Pull the patch that updates
+`methods/hipporag/prompts/prompt_template_manager.py`; do not install the
+external `hipporag` package into this benchmark environment.
+
 For the current Qwen3-4B + HippoRAG-v2 + NV-Embed-v2 setup, the non-baseline
 packages to check are:
 
