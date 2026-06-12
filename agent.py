@@ -888,6 +888,9 @@ class AgentWrapper:
                 "openie_mode": self.agent_config.get("hipporag_openie_mode"),
                 "embedding_batch_size": self.agent_config.get("hipporag_embedding_batch_size"),
                 "embedding_max_seq_len": self.agent_config.get("hipporag_embedding_max_seq_len"),
+                "embedding_device": self.agent_config.get("hipporag_embedding_device"),
+                "embedding_device_map": self.agent_config.get("hipporag_embedding_device_map"),
+                "embedding_torch_dtype": self.agent_config.get("hipporag_embedding_torch_dtype"),
             }
 
             if self.provider == "openai_compatible":

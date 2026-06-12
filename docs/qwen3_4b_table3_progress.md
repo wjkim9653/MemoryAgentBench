@@ -277,6 +277,8 @@ provider: openai_compatible
 api_base: http://127.0.0.1:8000/v1
 api_key: EMPTY
 hipporag_embedding_model: nvidia/NV-Embed-v2
+hipporag_embedding_device: cuda
+hipporag_embedding_torch_dtype: auto
 hipporag_max_new_tokens: 2048
 hipporag_qa_top_k: 10
 ```
@@ -295,6 +297,12 @@ agent.py::_handle_hippo_rag
 `dataset_config.generation_max_length`. HippoRAG uses the same LLM for OpenIE
 index construction and QA, so using short benchmark answer lengths such as 10
 tokens would truncate NER/triple extraction.
+
+NV-Embed-v2 is loaded without `device_map="auto"` in this setup. The runner
+already constrains the process with `CUDA_VISIBLE_DEVICES`, so the embedding
+model is moved directly to `cuda`. This avoids a `transformers/accelerate`
+compatibility issue where NV-Embed-v2 remote code does not expose
+`all_tied_weights_keys` during automatic device-map inference.
 
 ### Agentic Memory Candidates
 

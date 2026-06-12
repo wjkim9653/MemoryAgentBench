@@ -50,6 +50,9 @@ class HippoRAG:
                  openie_mode=None,
                  embedding_batch_size=None,
                  embedding_max_seq_len=None,
+                 embedding_device=None,
+                 embedding_device_map=None,
+                 embedding_torch_dtype=None,
                  ):
         """
         Initializes an instance of the class and its related components.
@@ -137,6 +140,15 @@ class HippoRAG:
 
         if embedding_max_seq_len is not None:
             self.global_config.embedding_max_seq_len = embedding_max_seq_len
+
+        if embedding_device is not None:
+            self.global_config.embedding_device = embedding_device
+
+        if embedding_device_map is not None:
+            self.global_config.embedding_device_map = embedding_device_map
+
+        if embedding_torch_dtype is not None:
+            self.global_config.embedding_torch_dtype = embedding_torch_dtype
 
         _print_config = ",\n  ".join([f"{k} = {v}" for k, v in asdict(self.global_config).items()])
         logger.debug(f"HippoRAG init with config:\n  {_print_config}\n")

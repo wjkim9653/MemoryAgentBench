@@ -28,6 +28,10 @@ class NVEmbedV2EmbeddingModel(BaseEmbeddingModel):
         logger.debug(f"Initializing {self.__class__.__name__}'s embedding model with params: {self.embedding_config.model_init_params}")
 
         self.embedding_model = AutoModel.from_pretrained(**self.embedding_config.model_init_params)
+        embedding_device = getattr(self.global_config, "embedding_device", None)
+        if embedding_device and self.embedding_config.model_init_params.get("device_map") is None:
+            self.embedding_model = self.embedding_model.to(embedding_device)
+        self.embedding_model.eval()
         self.embedding_dim = self.embedding_model.config.hidden_size
 
     def _init_embedding_config(self) -> None:
@@ -38,18 +42,23 @@ class NVEmbedV2EmbeddingModel(BaseEmbeddingModel):
             None
         """
 
+        model_init_params = {
+            "pretrained_model_name_or_path": self.embedding_model_name,
+            "trust_remote_code": True,
+        }
+        embedding_torch_dtype = getattr(self.global_config, "embedding_torch_dtype", "auto")
+        if embedding_torch_dtype:
+            model_init_params["torch_dtype"] = embedding_torch_dtype
+
+        embedding_device_map = getattr(self.global_config, "embedding_device_map", None)
+        if embedding_device_map:
+            model_init_params["device_map"] = embedding_device_map
+
         config_dict = {
             "embedding_model_name": self.embedding_model_name,
             "norm": self.global_config.embedding_return_as_normalized,
             # "max_seq_length": self.global_config.embedding_max_seq_len,
-            "model_init_params": {
-                # "model_name_or_path": self.embedding_model_name2mode_name_or_path[self.embedding_model_name],
-                "pretrained_model_name_or_path": self.embedding_model_name,
-                "trust_remote_code": True,
-                # "torch_dtype": "auto",
-                'device_map': "auto",  # added this line to use multiple GPUs
-                # **kwargs
-            },
+            "model_init_params": model_init_params,
             "encode_params": {
                 "max_length": self.global_config.embedding_max_seq_len,  # 32768 from official example,
                 "instruction": "",
