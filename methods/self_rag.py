@@ -161,6 +161,8 @@ class SelfRAG:
         system_prompt = (
             "You are a memory agent answering benchmark questions. "
             "Use only the provided retrieved memory passages and the rules in the question. "
+            "If retrieved passages contain numbered conflicting facts, choose the fact with the larger serial number. "
+            "Do not use real-world knowledge when it conflicts with the provided memory. "
             "Give a concise answer without extra explanation."
         )
         user_prompt = (
