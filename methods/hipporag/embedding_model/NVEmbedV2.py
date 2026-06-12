@@ -27,7 +27,7 @@ class NVEmbedV2EmbeddingModel(BaseEmbeddingModel):
         # Initializing the embedding model
         logger.debug(f"Initializing {self.__class__.__name__}'s embedding model with params: {self.embedding_config.model_init_params}")
 
-        self._patch_tied_weights_keys_compat()
+        self._patch_transformers_compat()
         self.embedding_model = AutoModel.from_pretrained(**self.embedding_config.model_init_params)
         embedding_device = getattr(self.global_config, "embedding_device", None)
         if embedding_device and self.embedding_config.model_init_params.get("device_map") is None:
@@ -71,6 +71,10 @@ class NVEmbedV2EmbeddingModel(BaseEmbeddingModel):
         self.embedding_config = EmbeddingConfig.from_dict(config_dict=config_dict)
         logger.debug(f"Init {self.__class__.__name__}'s embedding_config: {self.embedding_config}")
 
+    def _patch_transformers_compat(self) -> None:
+        self._patch_tied_weights_keys_compat()
+        self._patch_dynamic_cache_compat()
+
     def _patch_tied_weights_keys_compat(self) -> None:
         try:
             from transformers.modeling_utils import PreTrainedModel
@@ -100,6 +104,44 @@ class NVEmbedV2EmbeddingModel(BaseEmbeddingModel):
             get_all_tied_weights_keys,
             set_all_tied_weights_keys,
         )
+
+    def _patch_dynamic_cache_compat(self) -> None:
+        try:
+            from transformers.cache_utils import DynamicCache
+        except Exception as exc:
+            logger.warning(f"Could not patch transformers DynamicCache compatibility: {exc}")
+            return
+
+        if not hasattr(DynamicCache, "from_legacy_cache"):
+
+            @classmethod
+            def from_legacy_cache(cls, past_key_values=None):
+                cache = cls()
+                if past_key_values is None:
+                    return cache
+
+                for layer_idx, layer_past in enumerate(past_key_values):
+                    if layer_past is None:
+                        continue
+                    key_states, value_states = layer_past[:2]
+                    try:
+                        cache.update(key_states, value_states, layer_idx)
+                    except TypeError:
+                        cache.update(key_states, value_states, layer_idx, cache_kwargs=None)
+                return cache
+
+            DynamicCache.from_legacy_cache = from_legacy_cache
+
+        if not hasattr(DynamicCache, "to_legacy_cache"):
+
+            def to_legacy_cache(cache):
+                key_cache = getattr(cache, "key_cache", None)
+                value_cache = getattr(cache, "value_cache", None)
+                if key_cache is None or value_cache is None:
+                    return tuple()
+                return tuple(zip(key_cache, value_cache))
+
+            DynamicCache.to_legacy_cache = to_legacy_cache
 
     # def _add_eos(self, texts: List[str]) -> List[str]:
     #     # Adds EOS token to each text

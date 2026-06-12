@@ -309,6 +309,11 @@ final model-loading step even without `device_map`. The local NV-Embed-v2 wrappe
 patches `PreTrainedModel` with a compatibility property backed by the older
 `_tied_weights_keys` attribute before calling `AutoModel.from_pretrained`.
 
+NV-Embed-v2 remote code can also call `DynamicCache.from_legacy_cache`, which is
+missing in some installed `transformers` versions. The local wrapper patches
+`DynamicCache.from_legacy_cache` and `DynamicCache.to_legacy_cache` when needed
+before loading the model.
+
 ### Agentic Memory Candidates
 
 `MemGPT` in the paper maps most closely to the repo's Letta implementation:
