@@ -171,12 +171,12 @@ For the current Qwen3-4B + HippoRAG-v2 + NV-Embed-v2 setup, the non-baseline
 packages to check are:
 
 ```bash
-uv pip install "igraph>=0.11,<0.12" einops
+uv pip install "igraph>=0.11,<0.12" einops accelerate
 ```
 
 Most other HippoRAG imports are already part of the base benchmark environment:
-`torch`, `transformers`, `accelerate`, `numpy`, `pandas`, `tqdm`, `openai`,
-`httpx`, `filelock`, `packaging`, `pydantic`, and `tenacity`.
+`torch`, `transformers`, `numpy`, `pandas`, `tqdm`, `openai`, `httpx`,
+`filelock`, `packaging`, `pydantic`, and `tenacity`.
 
 Recommended HippoRAG Table 3 command after the smoke run succeeds:
 
